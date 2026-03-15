@@ -1,0 +1,23 @@
+name: nanuqfi-keeper
+
+services:
+  keeper:
+    image: ghcr.io/nanuqfi/nanuqfi-keeper:latest
+    container_name: nanuqfi-keeper
+    restart: unless-stopped
+    ports:
+      - "9000:3000"
+    env_file:
+      - .env
+    volumes:
+      - /home/nanuqfi/secrets/keeper-wallet.json:/run/secrets/keeper-wallet:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
