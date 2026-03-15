@@ -1,29 +1,39 @@
 import type { KeeperConfig } from './config'
 import { HealthMonitor } from './health/monitor'
+import { initDriftClient, checkDriftHealth, DriftDataCache } from './drift'
+import type { DriftClient } from '@drift-labs/sdk'
 
 export interface KeeperDeps {
   config: KeeperConfig
   monitor: HealthMonitor
+  driftClient?: DriftClient
+  dataCache?: DriftDataCache
 }
 
 export class Keeper {
   private readonly config: KeeperConfig
   private readonly monitor: HealthMonitor
+  private driftClient?: DriftClient
+  private dataCache?: DriftDataCache
   private running = false
   private cycleTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(deps: KeeperDeps) {
     this.config = deps.config
     this.monitor = deps.monitor
+    this.driftClient = deps.driftClient
+    this.dataCache = deps.dataCache
   }
 
   async boot(): Promise<void> {
     // 1. Verify RPC connectivity
     await this.checkRpc()
 
-    // 2. Check lease PDA (placeholder — real impl with Drift SDK)
-    // 3. Reconcile on-chain state (placeholder)
-    // 4. Check pending withdrawals (placeholder)
+    // 2. Initialize Drift SDK if config present and not already injected
+    if (this.config.drift?.rpcUrl && !this.driftClient) {
+      this.driftClient = await initDriftClient(this.config.drift)
+      this.dataCache = new DriftDataCache()
+    }
   }
 
   async start(): Promise<void> {
@@ -54,9 +64,15 @@ export class Keeper {
     const timeout = setTimeout(() => controller.abort(), cycleTimeout)
 
     try {
+      // Check Drift subscription health if connected
+      if (this.driftClient && !checkDriftHealth(this.driftClient)) {
+        this.monitor.recordCycleFailure('Drift subscription unhealthy')
+        return
+      }
+
       // 1. Reconcile on-chain state
       // 2. Run algorithm engine
-      // 3. Check AI triggers → run AI if needed
+      // 3. Check AI triggers -> run AI if needed
       // 4. Propose rebalance (if needed)
       // 5. Write heartbeat
 

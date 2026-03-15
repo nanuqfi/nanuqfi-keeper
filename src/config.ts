@@ -1,3 +1,10 @@
+export interface DriftConfig {
+  rpcUrl: string
+  rpcFallbackUrl?: string
+  walletKeypairPath: string
+  env: 'devnet' | 'mainnet-beta'
+}
+
 export interface KeeperConfig {
   rpcUrls: string[]
   keeperKeypairPath: string
@@ -9,6 +16,7 @@ export interface KeeperConfig {
   aiBudgetPerDay: number
   alertTelegramToken?: string
   alertTelegramChatId?: string
+  drift?: DriftConfig
 }
 
 export function loadConfig(): KeeperConfig {
@@ -27,5 +35,21 @@ export function loadConfig(): KeeperConfig {
     aiBudgetPerDay: Number(process.env.AI_BUDGET_PER_DAY ?? 5),
     alertTelegramToken: process.env.TELEGRAM_BOT_TOKEN,
     alertTelegramChatId: process.env.TELEGRAM_CHAT_ID,
+    drift: buildDriftConfig(),
+  }
+}
+
+function buildDriftConfig(): DriftConfig | undefined {
+  const rpcUrl = process.env.DRIFT_RPC_URL ?? process.env.RPC_URL_PRIMARY
+  const walletPath = process.env.KEEPER_WALLET_PATH ?? process.env.KEEPER_KEYPAIR_PATH
+
+  // Drift config is optional — without RPC URL or wallet, keeper runs in mock mode
+  if (!rpcUrl || !walletPath) return undefined
+
+  return {
+    rpcUrl,
+    rpcFallbackUrl: process.env.DRIFT_RPC_FALLBACK ?? process.env.RPC_URL_FALLBACK,
+    walletKeypairPath: walletPath,
+    env: (process.env.DRIFT_ENV as 'devnet' | 'mainnet-beta') ?? 'devnet',
   }
 }

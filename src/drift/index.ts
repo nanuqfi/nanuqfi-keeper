@@ -1,0 +1,6 @@
+export { initDriftClient, checkDriftHealth } from './client.js'
+export type { KeeperDriftConfig } from './client.js'
+export { DriftDataCache } from './data-api.js'
+export type { ParsedFundingRate, RawFundingRate } from './data-api.js'
+export { openPerpPosition, closePerpPosition } from './trading.js'
+export type { TradeParams } from './trading.js'
