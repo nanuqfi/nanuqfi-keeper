@@ -11,11 +11,12 @@
 
 **Tech Stack:** TypeScript, Vitest, Anthropic SDK, Node.js 22+
 **Deployment:** Docker → VPS
-**Tests:** 140 passing across 9 test files
+**Tests:** 156 passing across 10 test files
+**Deploy:** VPS reclabs3, port 9000, keeper.nanuqfi.com
 
 **Key Commands:**
 ```bash
-pnpm test                       # run all 140 tests
+pnpm test                       # run all 156 tests
 pnpm build                      # compile TypeScript
 pnpm dev                        # run with tsx
 docker build -t nanuqfi-keeper . # Docker build
