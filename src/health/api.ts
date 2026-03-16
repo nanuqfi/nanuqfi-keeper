@@ -1,5 +1,7 @@
 import { createServer, IncomingMessage, ServerResponse } from 'node:http'
 import type { HealthMonitor } from './monitor'
+import type { MarketScan } from '../scanner'
+import type { KeeperDecision, YieldData } from '../keeper'
 
 export interface VaultSnapshot {
   riskLevel: string
@@ -27,6 +29,9 @@ export interface KeeperDataSource {
   getHistory(riskLevel: string, limit?: number): DecisionLog[]
   getDecisions(riskLevel: string, limit?: number): DecisionLog[]
   getYields(): Record<string, number>
+  getMarketScan?(): MarketScan | null
+  getKeeperDecisions?(limit?: number): KeeperDecision[]
+  getLatestYieldData?(): YieldData | null
 }
 
 export function createApi(
@@ -60,7 +65,27 @@ export function createApi(
         const limit = Number(url.searchParams.get('limit') ?? 10)
         respond(res, 200, data.getDecisions(level, limit))
       } else if (path === '/v1/yields') {
-        respond(res, 200, data.getYields())
+        // Enhanced: return live yield data if available, fall back to static yields
+        const liveYields = data.getLatestYieldData?.()
+        if (liveYields) {
+          respond(res, 200, {
+            ...data.getYields(),
+            live: liveYields,
+          })
+        } else {
+          respond(res, 200, data.getYields())
+        }
+      } else if (path === '/v1/market-scan') {
+        const scan = data.getMarketScan?.() ?? null
+        if (!scan) {
+          respond(res, 200, { status: 'no scan yet', scan: null })
+        } else {
+          respond(res, 200, scan)
+        }
+      } else if (path === '/v1/decisions') {
+        const limit = Number(url.searchParams.get('limit') ?? 20)
+        const decisions = data.getKeeperDecisions?.(limit) ?? []
+        respond(res, 200, decisions)
       } else if (path === '/v1/status') {
         respond(res, 200, {
           ...monitor.getStatus(),

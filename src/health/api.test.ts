@@ -106,4 +106,115 @@ describe('Keeper REST API', () => {
     const { status } = await get('/unknown')
     expect(status).toBe(404)
   })
+
+  it('GET /v1/market-scan returns empty scan when no data', async () => {
+    const { status, body } = await get('/v1/market-scan')
+    expect(status).toBe(200)
+    // mockData has no getMarketScan, so returns fallback
+    expect(body).toHaveProperty('status', 'no scan yet')
+  })
+
+  it('GET /v1/decisions returns empty array when no data', async () => {
+    const { status, body } = await get('/v1/decisions')
+    expect(status).toBe(200)
+    expect(Array.isArray(body)).toBe(true)
+    expect((body as unknown[]).length).toBe(0)
+  })
+})
+
+// Test with enriched data source that provides market scan + keeper decisions
+describe('Keeper REST API — enriched endpoints', () => {
+  const monitor = new HealthMonitor()
+  const enrichedData: KeeperDataSource = {
+    ...mockData,
+    getMarketScan: () => ({
+      timestamp: 1710500000000,
+      opportunities: [
+        { protocol: 'Drift', strategy: 'USDC Lending', asset: 'USDC', apy: 0.065, tvl: 0, risk: 'low' as const, source: 'drift' },
+        { protocol: 'marginfi', strategy: 'USDC', asset: 'USDC', apy: 0.08, tvl: 500_000, risk: 'low' as const, source: 'defillama' },
+      ],
+      bestByRisk: {
+        low: { protocol: 'marginfi', strategy: 'USDC', asset: 'USDC', apy: 0.08, tvl: 500_000, risk: 'low' as const, source: 'defillama' },
+        medium: null,
+        high: null,
+      },
+      driftComparison: { driftBestApy: 0.065, marketBestApy: 0.08, driftRank: 2, totalScanned: 2 },
+    }),
+    getKeeperDecisions: (limit = 20) => [
+      {
+        timestamp: 1710500000000,
+        riskLevel: 'moderate',
+        proposal: { weights: { 'drift-lending': 5000, 'drift-basis': 3000, 'drift-jito-dn': 2000 }, excludedBackends: [], scores: { 'drift-lending': 0.4, 'drift-basis': 0.3 } },
+        yieldData: { usdcLendingRate: 0.02, solFundingRate: 0, solFundingHistory: [], solBorrowRate: 0.05, jitoStakingYield: 0.07 },
+      },
+    ].slice(0, limit),
+    getLatestYieldData: () => ({
+      usdcLendingRate: 0.02,
+      solFundingRate: 0.001,
+      solFundingHistory: [],
+      solBorrowRate: 0.05,
+      jitoStakingYield: 0.07,
+    }),
+  }
+
+  const api = createApi(monitor, enrichedData, 0)
+  let port: number
+
+  beforeAll(async () => {
+    await api.start()
+    const addr = api.server.address()
+    port = typeof addr === 'object' && addr ? addr.port : 3001
+  })
+
+  afterAll(async () => {
+    await api.stop()
+  })
+
+  async function get(path: string): Promise<{ status: number; body: unknown }> {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 3_000)
+    try {
+      const res = await fetch(`http://localhost:${port}${path}`, { signal: controller.signal })
+      const body = await res.json()
+      return { status: res.status, body }
+    } finally {
+      clearTimeout(timeout)
+    }
+  }
+
+  it('GET /v1/market-scan returns scan with opportunities', async () => {
+    const { status, body } = await get('/v1/market-scan')
+    expect(status).toBe(200)
+    const scan = body as { opportunities: unknown[]; driftComparison: { driftRank: number } }
+    expect(scan.opportunities).toHaveLength(2)
+    expect(scan.driftComparison.driftRank).toBe(2)
+  })
+
+  it('GET /v1/decisions returns keeper decisions', async () => {
+    const { status, body } = await get('/v1/decisions')
+    expect(status).toBe(200)
+    const decisions = body as { riskLevel: string }[]
+    expect(decisions).toHaveLength(1)
+    expect(decisions[0]!.riskLevel).toBe('moderate')
+  })
+
+  it('GET /v1/decisions respects limit parameter', async () => {
+    const { status, body } = await get('/v1/decisions?limit=0')
+    expect(status).toBe(200)
+    expect((body as unknown[]).length).toBe(0)
+  })
+
+  it('GET /v1/yields includes live yield data when available', async () => {
+    const { status, body } = await get('/v1/yields')
+    expect(status).toBe(200)
+    const yields = body as Record<string, unknown>
+    // Original yields still present
+    expect(yields).toHaveProperty('lending')
+    expect(yields).toHaveProperty('basis')
+    // Live data merged
+    expect(yields).toHaveProperty('live')
+    const live = yields.live as Record<string, unknown>
+    expect(live).toHaveProperty('usdcLendingRate', 0.02)
+    expect(live).toHaveProperty('jitoStakingYield', 0.07)
+  })
 })
