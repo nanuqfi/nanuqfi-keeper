@@ -4,9 +4,9 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "tsx src/index.ts",
+    "build": "tsc && node esbuild.config.js",
+    "start": "node dist/main.cjs",
+    "dev": "tsx src/main.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint src/",
@@ -14,15 +14,16 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39",
+    "@coral-xyz/anchor": "^0.30",
     "@drift-labs/sdk": "^2",
-    "@solana/web3.js": "^1.98",
-    "@coral-xyz/anchor": "^0.30"
+    "@solana/web3.js": "^1.98"
   },
   "devDependencies": {
-    "typescript": "^5.7",
-    "vitest": "^3",
+    "@types/node": "^22",
+    "esbuild": "^0.27.4",
     "tsx": "^4",
-    "@types/node": "^22"
+    "typescript": "^5.7",
+    "vitest": "^3"
   },
   "engines": {
     "node": ">=22"
