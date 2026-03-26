@@ -1,7 +1,7 @@
 import { createServer, IncomingMessage, ServerResponse } from 'node:http'
-import type { HealthMonitor } from './monitor'
-import type { MarketScan } from '../scanner'
-import type { KeeperDecision, YieldData } from '../keeper'
+import type { HealthMonitor } from './monitor.js'
+import type { MarketScan } from '../scanner/index.js'
+import type { KeeperDecision, YieldData } from '../keeper.js'
 
 export interface VaultSnapshot {
   riskLevel: string

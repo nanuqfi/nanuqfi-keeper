@@ -1,8 +1,8 @@
-import type { KeeperConfig } from './config'
-import { HealthMonitor } from './health/monitor'
-import { initDriftClient, checkDriftHealth, DriftDataCache } from './drift'
-import { AlgorithmEngine, type BackendConfig, type VaultState, type WeightProposal } from './engine'
-import { scanDeFiYields, type MarketScan } from './scanner'
+import type { KeeperConfig } from './config.js'
+import { HealthMonitor } from './health/monitor.js'
+import { initDriftClient, checkDriftHealth, DriftDataCache } from './drift/index.js'
+import { AlgorithmEngine, type BackendConfig, type VaultState, type WeightProposal } from './engine/index.js'
+import { scanDeFiYields, type MarketScan } from './scanner/index.js'
 import type { DriftClient } from '@drift-labs/sdk'
 
 export interface YieldData {
