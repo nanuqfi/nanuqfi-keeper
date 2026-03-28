@@ -63,6 +63,8 @@ export class Keeper {
   async start(): Promise<void> {
     this.running = true
     await this.boot()
+    // Run first cycle immediately, then schedule subsequent cycles
+    await this.runCycle()
     this.scheduleNextCycle()
   }
 
