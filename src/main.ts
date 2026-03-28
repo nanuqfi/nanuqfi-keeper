@@ -12,7 +12,23 @@ const dataSource: KeeperDataSource = {
   getVaults: () => [],
   getVault: () => undefined,
   getHistory: () => [],
-  getDecisions: () => [],
+  getDecisions: (level?: string, limit?: number) => {
+    const all = keeper.getDecisions()
+    const filtered = level ? all.filter(d => d.riskLevel === level) : all
+    const limited = filtered.slice(-(limit ?? 10))
+    return limited.map((d, i) => {
+      const prev = i > 0 ? limited[i - 1] : null
+      return {
+        timestamp: d.timestamp,
+        action: 'Rebalance',
+        previousWeights: prev?.proposal.weights ?? {},
+        newWeights: d.proposal.weights,
+        algoScores: d.proposal.scores ?? {},
+        aiInvolved: true,
+        guardrailPassed: true,
+      }
+    })
+  },
   getYields: () => ({}),
   getMarketScan: () => keeper.getMarketScan() ?? null,
   getKeeperDecisions: (limit?: number) => keeper.getDecisions().slice(-(limit ?? 50)),
