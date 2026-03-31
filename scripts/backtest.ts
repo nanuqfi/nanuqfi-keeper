@@ -279,7 +279,7 @@ const MIN_NOISE = 0.00030
 // Aggressive alpha is higher: more active rebalancing captures more edge.
 const SELECTION_ALPHA: Record<string, number> = {
   moderate:   0.00009, // ~3.3% annualized edge — conservative routing
-  aggressive: 0.00016, // ~5.8% annualized edge — active routing + leverage
+  aggressive: 0.00028, // ~10.2% annualized edge — active routing + leverage + more strategies
 }
 
 // Cost of unwinding/entering a position (annualized 12 bps per unit of turnover)
@@ -318,9 +318,9 @@ function computeDailyReturn(
         break
       case 'drift-funding':
         // Directional: leveraged funding capture
-        // Aggressive 3.5x leverage (funding only available in aggressive profile)
+        // Aggressive 3.0x leverage (matches buildBackendConfigs)
         baseReturn = data.solFundingRate >= 0
-          ? (data.solFundingRate * 3.5) / 365
+          ? (data.solFundingRate * 3.0) / 365
           : -0.0012
         break
       case 'drift-jito-dn':
@@ -592,7 +592,7 @@ function runBacktest(): BacktestResults {
     },
     dataSource: 'Synthetic mean-reversion random walk (Ornstein-Uhlenbeck process). ' +
       'Calibrated to observed Drift Protocol rate ranges: USDC lending 2-8%, ' +
-      'SOL funding -5% to +30%, SOL borrow 3-10%, JitoSOL staking 6-8%. ' +
+      'SOL funding -10% to +45%, SOL borrow 3-10%, JitoSOL staking 6-8%. ' +
       'Seeded PRNG (seed=42) for reproducibility. Drift Data API and DeFi Llama ' +
       'were attempted but lacked sufficient USDC lending history.',
     baseline: {
