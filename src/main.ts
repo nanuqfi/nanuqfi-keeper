@@ -10,6 +10,7 @@ const monitor = new HealthMonitor()
 const ai = config.aiApiKey
   ? new AIProvider({
       apiKey: config.aiApiKey,
+      baseURL: config.aiBaseURL,
       model: config.aiModel,
       maxCallsPerHour: config.aiMaxCallsPerHour,
       budgetPerDay: config.aiBudgetPerDay,

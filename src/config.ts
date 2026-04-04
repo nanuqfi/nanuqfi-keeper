@@ -11,6 +11,7 @@ export interface KeeperConfig {
   cycleIntervalMs: number
   aiCycleIntervalMs: number
   aiApiKey: string
+  aiBaseURL?: string
   aiModel: string
   aiMaxCallsPerHour: number
   aiBudgetPerDay: number
@@ -29,7 +30,8 @@ export function loadConfig(): KeeperConfig {
     keeperKeypairPath: process.env.KEEPER_KEYPAIR_PATH ?? '',
     cycleIntervalMs: Number(process.env.CYCLE_INTERVAL_MS ?? 600_000),
     aiCycleIntervalMs: Number(process.env.AI_CYCLE_INTERVAL_MS ?? 7_200_000),
-    aiApiKey: process.env.ANTHROPIC_API_KEY ?? '',
+    aiApiKey: process.env.ANTHROPIC_API_KEY ?? process.env.OPENROUTER_API_KEY ?? '',
+    aiBaseURL: process.env.AI_BASE_URL,
     aiModel: process.env.AI_MODEL ?? 'claude-sonnet-4-6',
     aiMaxCallsPerHour: Number(process.env.AI_MAX_CALLS_PER_HOUR ?? 10),
     aiBudgetPerDay: Number(process.env.AI_BUDGET_PER_DAY ?? 5),

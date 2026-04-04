@@ -3,6 +3,7 @@ import Anthropic from '@anthropic-ai/sdk'
 export interface AIProviderConfig {
   apiKey: string
   model: string
+  baseURL?: string    // OpenRouter: 'https://openrouter.ai/api/v1'
   maxCallsPerHour: number
   budgetPerDay: number  // USD (tracked for observability; enforcement is advisory)
 }
@@ -32,7 +33,10 @@ export class AIProvider {
 
   constructor(config: AIProviderConfig) {
     this.config = config
-    this.client = new Anthropic({ apiKey: config.apiKey })
+    this.client = new Anthropic({
+      apiKey: config.apiKey,
+      ...(config.baseURL ? { baseURL: config.baseURL } : {}),
+    })
   }
 
   /**
