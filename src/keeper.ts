@@ -4,6 +4,7 @@ import { initDriftClient, checkDriftHealth, DriftDataCache } from './drift/index
 import { AlgorithmEngine, type BackendConfig, type VaultState, type WeightProposal } from './engine/index.js'
 import { scanDeFiYields, type MarketScan } from './scanner/index.js'
 import type { DriftClient } from '@drift-labs/sdk'
+import { AIProvider, buildInsightPrompt, validateAIInsight, type AIInsight, type MarketContext } from './ai/index.js'
 
 export interface YieldData {
   usdcLendingRate: number
@@ -18,6 +19,7 @@ export interface KeeperDecision {
   riskLevel: string
   proposal: WeightProposal
   yieldData: YieldData
+  aiInsight?: AIInsight
 }
 
 export interface KeeperDeps {
@@ -25,6 +27,7 @@ export interface KeeperDeps {
   monitor: HealthMonitor
   driftClient?: DriftClient
   dataCache?: DriftDataCache
+  ai?: AIProvider
 }
 
 export class Keeper {
@@ -33,19 +36,23 @@ export class Keeper {
   private readonly engine: AlgorithmEngine
   private driftClient?: DriftClient
   private dataCache?: DriftDataCache
+  private ai: AIProvider | null
   private running = false
   private cycleTimer: ReturnType<typeof setTimeout> | null = null
+  private aiCycleTimer: ReturnType<typeof setTimeout> | null = null
   private currentWeights: Record<string, Record<string, number>> = {}
   private readonly maxDecisionHistory = 500
   private decisions: KeeperDecision[] = []
   private latestMarketScan: MarketScan | null = null
   private latestYieldData: YieldData | null = null
+  private cachedInsight: AIInsight | null = null
 
   constructor(deps: KeeperDeps) {
     this.config = deps.config
     this.monitor = deps.monitor
     this.driftClient = deps.driftClient
     this.dataCache = deps.dataCache
+    this.ai = deps.ai ?? null
     this.engine = new AlgorithmEngine()
   }
 
@@ -63,9 +70,10 @@ export class Keeper {
   async start(): Promise<void> {
     this.running = true
     await this.boot()
-    // Run first cycle immediately, then schedule subsequent cycles
     await this.runCycle()
+    await this.runAICycle()
     this.scheduleNextCycle()
+    this.scheduleNextAICycle()
   }
 
   stop(): void {
@@ -73,6 +81,10 @@ export class Keeper {
     if (this.cycleTimer) {
       clearTimeout(this.cycleTimer)
       this.cycleTimer = null
+    }
+    if (this.aiCycleTimer) {
+      clearTimeout(this.aiCycleTimer)
+      this.aiCycleTimer = null
     }
   }
 
@@ -96,12 +108,71 @@ export class Keeper {
     return this.currentWeights
   }
 
+  /** Access cached AI insight, returns null if absent or stale. */
+  getAIInsight(): AIInsight | null {
+    if (!this.cachedInsight) return null
+    const maxAge = this.config.aiCycleIntervalMs * 2
+    if (Date.now() - this.cachedInsight.timestamp > maxAge) {
+      this.cachedInsight = null
+      return null
+    }
+    return this.cachedInsight
+  }
+
   private scheduleNextCycle(): void {
     if (!this.running) return
     this.cycleTimer = setTimeout(async () => {
       await this.runCycle()
       this.scheduleNextCycle()
     }, this.config.cycleIntervalMs)
+  }
+
+  private scheduleNextAICycle(): void {
+    if (!this.running || !this.ai) return
+    this.aiCycleTimer = setTimeout(async () => {
+      await this.runAICycle()
+      this.scheduleNextAICycle()
+    }, this.config.aiCycleIntervalMs)
+  }
+
+  async runAICycle(): Promise<void> {
+    if (!this.ai) return
+    if (!this.ai.isAvailable) {
+      console.log('[AI] Skipped — provider unavailable (rate limited or circuit open)')
+      return
+    }
+
+    try {
+      const yieldData = this.latestYieldData ?? await this.fetchYieldData()
+      const weights = this.currentWeights
+
+      const context: MarketContext = {
+        vaultTvl: { moderate: 0, aggressive: 0 },
+        currentPositions: Object.entries(weights['moderate'] ?? {}).map(([name, bps]) => ({
+          name,
+          allocation: bps / 100,
+        })),
+        fundingRates: { 'SOL-PERP': yieldData.solFundingRate },
+        lendingApy: yieldData.usdcLendingRate,
+        insuranceYield: 0,
+        recentLiquidationVolume: 0,
+        oracleDeviation: {},
+      }
+
+      const strategyNames = ['drift-lending', 'drift-basis', 'drift-funding', 'drift-jito-dn']
+      const prompt = buildInsightPrompt(context, strategyNames)
+      const rawResponse = await this.ai.analyze(prompt)
+      const result = validateAIInsight(rawResponse)
+
+      if (result.valid && result.insight) {
+        this.cachedInsight = { ...result.insight, timestamp: Date.now() }
+        console.log(`[AI] Insight cached — risk_elevated: ${result.insight.riskElevated}, reasoning: ${result.insight.reasoning}`)
+      } else {
+        console.warn(`[AI] Invalid response rejected: ${result.rejectionReason}`)
+      }
+    } catch (error) {
+      console.error('[AI] Cycle failed:', error instanceof Error ? error.message : 'Unknown error')
+    }
   }
 
   async runCycle(): Promise<void> {
@@ -130,7 +201,7 @@ export class Keeper {
           currentWeights: this.currentWeights[riskLevel] ?? {},
         }
 
-        const proposal = this.engine.propose(state)
+        const proposal = this.engine.propose(state, this.getAIInsight() ?? undefined)
 
         // Log the decision
         this.decisions.push({
@@ -138,6 +209,7 @@ export class Keeper {
           riskLevel,
           proposal,
           yieldData,
+          aiInsight: this.getAIInsight() ?? undefined,
         })
 
         // Update current weights

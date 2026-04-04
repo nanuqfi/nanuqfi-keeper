@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { Keeper } from './keeper'
 import { HealthMonitor } from './health/monitor'
 import type { KeeperConfig } from './config'
+import type { AIProvider } from './ai/index'
 
 const mockConfig: KeeperConfig = {
   rpcUrls: ['http://localhost:8899'],
@@ -193,5 +194,142 @@ describe('Keeper', () => {
       const sum = Object.values(vaultWeights).reduce((a, b) => a + b, 0)
       expect(sum).toBe(10_000)
     }
+  })
+})
+
+describe('AI cycle', () => {
+  const originalFetchAI = globalThis.fetch
+
+  afterEach(() => {
+    globalThis.fetch = originalFetchAI
+  })
+
+  function mockFetchForAICycle() {
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('llama.fi')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ status: 'success', data: [] }),
+        })
+      }
+      if (typeof url === 'string' && url.includes('rateHistory')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ rates: [] }),
+        })
+      }
+      if (typeof url === 'string' && url.includes('fundingRates')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ fundingRates: [] }),
+        })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
+  }
+
+  it('stores AI insight when AI provider returns valid response', async () => {
+    const mockAi = {
+      isAvailable: true,
+      analyze: vi.fn().mockResolvedValue(JSON.stringify({
+        strategies: { 'drift-lending': 0.9, 'drift-basis': 0.5 },
+        risk_elevated: false,
+        reasoning: 'Test insight.',
+      })),
+    }
+
+    const keeper = new Keeper({
+      config: { ...mockConfig, aiCycleIntervalMs: 999_999 },
+      monitor: new HealthMonitor(),
+      ai: mockAi as unknown as AIProvider,
+    })
+
+    await keeper.runAICycle()
+    const insight = keeper.getAIInsight()
+
+    expect(insight).not.toBeNull()
+    expect(insight?.strategies['drift-lending']).toBe(0.9)
+    expect(insight?.riskElevated).toBe(false)
+    expect(mockAi.analyze).toHaveBeenCalledOnce()
+
+    keeper.stop()
+  })
+
+  it('keeps stale insight when AI call fails', async () => {
+    const mockAi = {
+      isAvailable: true,
+      analyze: vi.fn(),
+    }
+
+    const keeper = new Keeper({
+      config: { ...mockConfig, aiCycleIntervalMs: 999_999 },
+      monitor: new HealthMonitor(),
+      ai: mockAi as unknown as AIProvider,
+    })
+
+    // First call succeeds
+    mockAi.analyze.mockResolvedValueOnce(JSON.stringify({
+      strategies: { 'drift-lending': 0.9 },
+      risk_elevated: false,
+      reasoning: 'Good.',
+    }))
+    await keeper.runAICycle()
+    expect(keeper.getAIInsight()).not.toBeNull()
+
+    // Second call fails — stale insight preserved
+    mockAi.analyze.mockRejectedValueOnce(new Error('fail'))
+    await keeper.runAICycle()
+    expect(keeper.getAIInsight()).not.toBeNull()
+    expect(keeper.getAIInsight()?.strategies['drift-lending']).toBe(0.9)
+
+    keeper.stop()
+  })
+
+  it('skips AI cycle when provider is unavailable', async () => {
+    const mockAi = {
+      isAvailable: false,
+      analyze: vi.fn(),
+    }
+
+    const keeper = new Keeper({
+      config: { ...mockConfig, aiCycleIntervalMs: 999_999 },
+      monitor: new HealthMonitor(),
+      ai: mockAi as unknown as AIProvider,
+    })
+
+    await keeper.runAICycle()
+    expect(mockAi.analyze).not.toHaveBeenCalled()
+    expect(keeper.getAIInsight()).toBeNull()
+
+    keeper.stop()
+  })
+
+  it('includes AI insight in decisions', async () => {
+    mockFetchForAICycle()
+
+    const mockAi = {
+      isAvailable: true,
+      analyze: vi.fn().mockResolvedValue(JSON.stringify({
+        strategies: { 'drift-lending': 0.9, 'drift-basis': 0.7, 'drift-jito-dn': 0.8 },
+        risk_elevated: false,
+        reasoning: 'All stable.',
+      })),
+    }
+
+    const keeper = new Keeper({
+      config: { ...mockConfig, aiCycleIntervalMs: 999_999 },
+      monitor: new HealthMonitor(),
+      ai: mockAi as unknown as AIProvider,
+    })
+
+    await keeper.runAICycle()
+    await keeper.runCycle()
+
+    const decisions = keeper.getDecisions()
+    expect(decisions.length).toBeGreaterThan(0)
+    expect(decisions[0]!.aiInsight).toBeDefined()
+    expect(decisions[0]!.aiInsight?.reasoning).toBe('All stable.')
+
+    keeper.stop()
   })
 })
