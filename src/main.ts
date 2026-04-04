@@ -2,11 +2,20 @@ import { loadConfig } from './config.js'
 import { HealthMonitor } from './health/monitor.js'
 import { createApi } from './health/api.js'
 import { Keeper } from './keeper.js'
+import { AIProvider } from './ai/index.js'
 import type { KeeperDataSource } from './health/api.js'
 
 const config = loadConfig()
 const monitor = new HealthMonitor()
-const keeper = new Keeper({ config, monitor })
+const ai = config.aiApiKey
+  ? new AIProvider({
+      apiKey: config.aiApiKey,
+      model: config.aiModel,
+      maxCallsPerHour: config.aiMaxCallsPerHour,
+      budgetPerDay: config.aiBudgetPerDay,
+    })
+  : undefined
+const keeper = new Keeper({ config, monitor, ai })
 
 const dataSource: KeeperDataSource = {
   getVaults: () => [],
@@ -24,11 +33,13 @@ const dataSource: KeeperDataSource = {
         previousWeights: prev?.proposal.weights ?? {},
         newWeights: d.proposal.weights,
         algoScores: d.proposal.scores ?? {},
-        aiInvolved: true,
+        aiInvolved: !!d.aiInsight,
+        aiReasoning: d.aiInsight?.reasoning,
         guardrailPassed: true,
       }
     })
   },
+  getAIInsight: () => keeper.getAIInsight(),
   getYields: () => ({}),
   getMarketScan: () => keeper.getMarketScan() ?? null,
   getKeeperDecisions: (limit?: number) => keeper.getDecisions().slice(-(limit ?? 50)),
@@ -42,6 +53,10 @@ async function main() {
   console.log(`[NanuqFi Keeper] Starting on port ${port}...`)
   console.log(`[NanuqFi Keeper] Cycle interval: ${config.cycleIntervalMs / 1000}s`)
   console.log(`[NanuqFi Keeper] Drift env: ${config.drift?.env ?? 'none'}`)
+  console.log(`[NanuqFi Keeper] AI layer: ${ai ? 'enabled' : 'disabled (no API key)'}`)
+  if (ai) {
+    console.log(`[NanuqFi Keeper] AI cycle interval: ${config.aiCycleIntervalMs / 1000}s`)
+  }
 
   await api.start()
   console.log(`[NanuqFi Keeper] API listening on port ${port}`)
