@@ -1,5 +1,8 @@
 import { computeRiskAdjustedScore, type YieldSource } from './scoring.js'
 import { checkAutoExit, type AutoExitContext } from './auto-exit.js'
+import type { AIInsight } from '../ai/index.js'
+
+const PERP_STRATEGIES = new Set(['drift-basis', 'drift-funding', 'drift-jito-dn'])
 
 export interface BackendConfig {
   name: string
@@ -34,7 +37,7 @@ export interface WeightProposal {
  *     Any rounding remainder is added to the highest-scoring backend.
  */
 export class AlgorithmEngine {
-  propose(state: VaultState): WeightProposal {
+  propose(state: VaultState, aiInsight?: AIInsight): WeightProposal {
     const excluded: string[] = []
     const scores: Record<string, number> = {}
 
@@ -47,7 +50,18 @@ export class AlgorithmEngine {
         riskLevel: backend.autoExitContext.riskLevel ?? state.riskLevel,
       })
 
-      const score = computeRiskAdjustedScore(backend.apy, backend.volatility)
+      const rawScore = computeRiskAdjustedScore(backend.apy, backend.volatility)
+
+      // Apply AI confidence multiplier
+      let score = rawScore
+      if (aiInsight) {
+        const confidence = aiInsight.strategies[backend.name] ?? 1.0
+        score *= confidence
+        if (aiInsight.riskElevated && PERP_STRATEGIES.has(backend.name)) {
+          score *= 0.5
+        }
+      }
+
       scores[backend.name] = score
 
       if (exitResult.shouldExit) {

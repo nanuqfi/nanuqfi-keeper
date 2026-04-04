@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { AlgorithmEngine, type VaultState } from './algorithm-engine.js'
+import type { AIInsight } from '../ai/index.js'
 
 function sumWeights(weights: Record<string, number>): number {
   return Object.values(weights).reduce((sum, w) => sum + w, 0)
@@ -210,5 +211,95 @@ describe('AlgorithmEngine.propose — edge cases', () => {
     ])
     const proposal = engine.propose(state)
     expect(sumWeights(proposal.weights)).toBe(10_000)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// AI-blended scoring
+// ---------------------------------------------------------------------------
+describe('AI-blended scoring', () => {
+  const baseState: VaultState = {
+    riskLevel: 'moderate',
+    backends: [
+      {
+        name: 'drift-lending',
+        apy: 0.02,
+        volatility: 0.05,
+        autoExitContext: { riskLevel: 'moderate' },
+      },
+      {
+        name: 'drift-basis',
+        apy: 0.15,
+        volatility: 0.20,
+        autoExitContext: { riskLevel: 'moderate' },
+      },
+    ],
+    currentWeights: {},
+  }
+
+  it('applies AI confidence multipliers to scores', () => {
+    const engine = new AlgorithmEngine()
+    const insight: AIInsight = {
+      strategies: { 'drift-lending': 1.0, 'drift-basis': 0.5 },
+      riskElevated: false,
+      reasoning: 'test',
+      timestamp: Date.now(),
+    }
+
+    const withAi = engine.propose(baseState, insight)
+    const withoutAi = engine.propose(baseState)
+
+    expect(withAi.weights['drift-lending']).toBeGreaterThan(withoutAi.weights['drift-lending']!)
+    expect(withAi.weights['drift-basis']).toBeLessThan(withoutAi.weights['drift-basis']!)
+  })
+
+  it('dampens perp scores when riskElevated is true', () => {
+    const engine = new AlgorithmEngine()
+    const insight: AIInsight = {
+      strategies: { 'drift-lending': 1.0, 'drift-basis': 1.0 },
+      riskElevated: true,
+      reasoning: 'test',
+      timestamp: Date.now(),
+    }
+
+    const withRisk = engine.propose(baseState, insight)
+    const withoutRisk = engine.propose(baseState)
+
+    expect(withRisk.weights['drift-lending']).toBeGreaterThan(withoutRisk.weights['drift-lending']!)
+    expect(withRisk.weights['drift-basis']).toBeLessThan(withoutRisk.weights['drift-basis']!)
+  })
+
+  it('defaults to 1.0 when AI insight is undefined', () => {
+    const engine = new AlgorithmEngine()
+    const without = engine.propose(baseState)
+    const withNull = engine.propose(baseState, undefined)
+    expect(without.weights).toEqual(withNull.weights)
+  })
+
+  it('defaults to 1.0 for strategies not in AI insight', () => {
+    const engine = new AlgorithmEngine()
+    const insight: AIInsight = {
+      strategies: { 'drift-lending': 1.0 },
+      riskElevated: false,
+      reasoning: 'test',
+      timestamp: Date.now(),
+    }
+
+    const result = engine.propose(baseState, insight)
+    expect(result.weights['drift-basis']).toBeGreaterThan(0)
+  })
+
+  it('excludes backend when AI confidence is 0', () => {
+    const engine = new AlgorithmEngine()
+    const insight: AIInsight = {
+      strategies: { 'drift-lending': 1.0, 'drift-basis': 0.0 },
+      riskElevated: false,
+      reasoning: 'test',
+      timestamp: Date.now(),
+    }
+
+    const result = engine.propose(baseState, insight)
+    expect(result.weights['drift-basis']).toBe(0)
+    expect(result.weights['drift-lending']).toBe(10_000)
   })
 })
