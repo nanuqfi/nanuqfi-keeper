@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { validateAIResponse, type ValidationResult } from './response-validator.js'
+import { validateAIResponse, type ValidationResult, validateAIInsight } from './response-validator.js'
 
 // Helper: build a minimal valid payload
 function validPayload(overrides: Record<string, unknown> = {}): string {
@@ -220,5 +220,93 @@ describe('validateAIResponse', () => {
       expect(result.valid).toBe(false)
       expect(result.suggestion).toBeUndefined()
     })
+  })
+})
+
+// ─── validateAIInsight ─────────────────────────────────────────────────────
+
+describe('validateAIInsight', () => {
+  it('accepts a well-formed insight', () => {
+    const raw = JSON.stringify({
+      strategies: { 'drift-lending': 0.95, 'drift-basis': 0.6 },
+      risk_elevated: false,
+      reasoning: 'Lending stable, basis narrowing.',
+    })
+    const result = validateAIInsight(raw)
+    expect(result.valid).toBe(true)
+    expect(result.insight?.strategies['drift-lending']).toBe(0.95)
+    expect(result.insight?.riskElevated).toBe(false)
+    expect(result.insight?.reasoning).toBe('Lending stable, basis narrowing.')
+  })
+
+  it('rejects confidence > 1', () => {
+    const raw = JSON.stringify({
+      strategies: { 'drift-lending': 1.5 },
+      risk_elevated: false,
+      reasoning: 'Test.',
+    })
+    const result = validateAIInsight(raw)
+    expect(result.valid).toBe(false)
+    expect(result.rejectionReason).toContain('drift-lending')
+  })
+
+  it('rejects confidence < 0', () => {
+    const raw = JSON.stringify({
+      strategies: { 'drift-lending': -0.1 },
+      risk_elevated: false,
+      reasoning: 'Test.',
+    })
+    const result = validateAIInsight(raw)
+    expect(result.valid).toBe(false)
+    expect(result.rejectionReason).toContain('drift-lending')
+  })
+
+  it('rejects non-boolean risk_elevated', () => {
+    const raw = JSON.stringify({
+      strategies: { 'drift-lending': 0.9 },
+      risk_elevated: 'yes',
+      reasoning: 'Test.',
+    })
+    const result = validateAIInsight(raw)
+    expect(result.valid).toBe(false)
+    expect(result.rejectionReason).toContain('risk_elevated')
+  })
+
+  it('rejects missing strategies field', () => {
+    const raw = JSON.stringify({
+      risk_elevated: false,
+      reasoning: 'Test.',
+    })
+    const result = validateAIInsight(raw)
+    expect(result.valid).toBe(false)
+    expect(result.rejectionReason).toContain('strategies')
+  })
+
+  it('rejects empty reasoning', () => {
+    const raw = JSON.stringify({
+      strategies: { 'drift-lending': 0.9 },
+      risk_elevated: false,
+      reasoning: '  ',
+    })
+    const result = validateAIInsight(raw)
+    expect(result.valid).toBe(false)
+    expect(result.rejectionReason).toContain('reasoning')
+  })
+
+  it('rejects invalid JSON', () => {
+    const result = validateAIInsight('not json')
+    expect(result.valid).toBe(false)
+    expect(result.rejectionReason).toContain('JSON')
+  })
+
+  it('accepts empty strategies object', () => {
+    const raw = JSON.stringify({
+      strategies: {},
+      risk_elevated: true,
+      reasoning: 'All strategies risky.',
+    })
+    const result = validateAIInsight(raw)
+    expect(result.valid).toBe(true)
+    expect(result.insight?.riskElevated).toBe(true)
   })
 })

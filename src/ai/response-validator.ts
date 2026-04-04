@@ -91,3 +91,78 @@ export function validateAIResponse(raw: string): ValidationResult {
     },
   }
 }
+
+// ─── AIInsight (confidence-based, replaces weight-based suggestion) ─────
+
+export interface AIInsight {
+  strategies: Record<string, number>  // per-strategy confidence 0.0–1.0
+  riskElevated: boolean               // cross-cutting risk flag
+  reasoning: string                   // human-readable explanation
+  timestamp: number                   // set by caller, not validated here
+}
+
+export interface InsightValidationResult {
+  valid: boolean
+  insight?: AIInsight
+  rejectionReason?: string
+}
+
+export function validateAIInsight(raw: string): InsightValidationResult {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return { valid: false, rejectionReason: 'Failed to parse response as JSON' }
+  }
+
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    return { valid: false, rejectionReason: 'Response must be a JSON object' }
+  }
+
+  const obj = parsed as Record<string, unknown>
+
+  // 1. strategies
+  if (!('strategies' in obj)) {
+    return { valid: false, rejectionReason: 'Missing required field: strategies' }
+  }
+  const strategies = obj['strategies']
+  if (typeof strategies !== 'object' || strategies === null || Array.isArray(strategies)) {
+    return { valid: false, rejectionReason: 'Field "strategies" must be a non-null object' }
+  }
+
+  const stratMap = strategies as Record<string, unknown>
+  for (const [key, val] of Object.entries(stratMap)) {
+    if (typeof val !== 'number' || !Number.isFinite(val)) {
+      return { valid: false, rejectionReason: `Strategy "${key}" confidence must be a finite number` }
+    }
+    if (val < 0 || val > 1) {
+      return { valid: false, rejectionReason: `Strategy "${key}" confidence must be 0.0–1.0, got ${val}` }
+    }
+  }
+
+  // 2. risk_elevated
+  if (!('risk_elevated' in obj)) {
+    return { valid: false, rejectionReason: 'Missing required field: risk_elevated' }
+  }
+  if (typeof obj['risk_elevated'] !== 'boolean') {
+    return { valid: false, rejectionReason: 'Field "risk_elevated" must be a boolean' }
+  }
+
+  // 3. reasoning
+  if (!('reasoning' in obj)) {
+    return { valid: false, rejectionReason: 'Missing required field: reasoning' }
+  }
+  if (typeof obj['reasoning'] !== 'string' || (obj['reasoning'] as string).trim().length === 0) {
+    return { valid: false, rejectionReason: 'Field "reasoning" must be a non-empty string' }
+  }
+
+  return {
+    valid: true,
+    insight: {
+      strategies: stratMap as Record<string, number>,
+      riskElevated: obj['risk_elevated'] as boolean,
+      reasoning: obj['reasoning'] as string,
+      timestamp: 0, // caller sets this
+    },
+  }
+}
