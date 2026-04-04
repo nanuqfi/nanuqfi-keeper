@@ -41,6 +41,7 @@ const dataSource: KeeperDataSource = {
     })
   },
   getAIInsight: () => keeper.getAIInsight(),
+  getAIHistory: (limit?: number) => keeper.getAIHistory(limit),
   getYields: () => ({}),
   getMarketScan: () => keeper.getMarketScan() ?? null,
   getKeeperDecisions: (limit?: number) => keeper.getDecisions().slice(-(limit ?? 50)),

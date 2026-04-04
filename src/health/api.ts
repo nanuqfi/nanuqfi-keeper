@@ -33,6 +33,7 @@ export interface KeeperDataSource {
   getKeeperDecisions?(limit?: number): KeeperDecision[]
   getLatestYieldData?(): YieldData | null
   getAIInsight?(): import('../ai/index.js').AIInsight | null
+  getAIHistory?(limit?: number): import('../ai/index.js').AIInsight[]
 }
 
 export function createApi(
@@ -98,6 +99,10 @@ export function createApi(
           available: insight !== null,
           insight,
         })
+      } else if (path === '/v1/ai/history') {
+        const limit = Math.min(Number(url.searchParams.get('limit') ?? 20), 100)
+        const history = data.getAIHistory?.(limit) ?? []
+        respond(res, 200, history)
       } else {
         respond(res, 404, { error: 'Not found' })
       }
