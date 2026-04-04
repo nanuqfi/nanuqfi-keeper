@@ -1,3 +1,4 @@
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import type { KeeperConfig } from './config.js'
 import { HealthMonitor } from './health/monitor.js'
 import { initDriftClient, checkDriftHealth, DriftDataCache } from './drift/index.js'
@@ -5,6 +6,9 @@ import { AlgorithmEngine, type BackendConfig, type VaultState, type WeightPropos
 import { scanDeFiYields, type MarketScan } from './scanner/index.js'
 import type { DriftClient } from '@drift-labs/sdk'
 import { AIProvider, buildInsightPrompt, validateAIInsight, type AIInsight, type MarketContext } from './ai/index.js'
+
+const AI_HISTORY_PATH = process.env.AI_HISTORY_PATH ?? '/data/ai-history.json'
+const AI_HISTORY_MAX = 500
 
 export interface YieldData {
   usdcLendingRate: number
@@ -46,6 +50,7 @@ export class Keeper {
   private latestMarketScan: MarketScan | null = null
   private latestYieldData: YieldData | null = null
   private cachedInsight: AIInsight | null = null
+  private aiHistory: AIInsight[] = []
 
   constructor(deps: KeeperDeps) {
     this.config = deps.config
@@ -57,6 +62,8 @@ export class Keeper {
   }
 
   async boot(): Promise<void> {
+    this.loadAIHistory()
+
     // 1. Verify RPC connectivity
     await this.checkRpc()
 
@@ -119,6 +126,33 @@ export class Keeper {
     return this.cachedInsight
   }
 
+  /** Access AI insight history, most recent first. */
+  getAIHistory(limit = 20): AIInsight[] {
+    return this.aiHistory.slice(-limit).reverse()
+  }
+
+  private loadAIHistory(): void {
+    try {
+      const raw = readFileSync(AI_HISTORY_PATH, 'utf-8')
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) {
+        this.aiHistory = parsed.slice(-AI_HISTORY_MAX)
+      }
+    } catch {
+      this.aiHistory = []
+    }
+  }
+
+  private saveAIHistory(): void {
+    try {
+      const dir = AI_HISTORY_PATH.substring(0, AI_HISTORY_PATH.lastIndexOf('/'))
+      if (dir) mkdirSync(dir, { recursive: true })
+      writeFileSync(AI_HISTORY_PATH, JSON.stringify(this.aiHistory))
+    } catch (err) {
+      console.error('[AI] Failed to persist history:', err instanceof Error ? err.message : err)
+    }
+  }
+
   private scheduleNextCycle(): void {
     if (!this.running) return
     this.cycleTimer = setTimeout(async () => {
@@ -167,6 +201,11 @@ export class Keeper {
       if (result.valid && result.insight) {
         this.cachedInsight = { ...result.insight, timestamp: Date.now() }
         console.log(`[AI] Insight cached — risk_elevated: ${result.insight.riskElevated}, reasoning: ${result.insight.reasoning}`)
+        this.aiHistory.push(this.cachedInsight)
+        if (this.aiHistory.length > AI_HISTORY_MAX) {
+          this.aiHistory = this.aiHistory.slice(-AI_HISTORY_MAX)
+        }
+        this.saveAIHistory()
       } else {
         console.warn(`[AI] Invalid response rejected: ${result.rejectionReason}`)
       }
