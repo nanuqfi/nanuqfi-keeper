@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildPrompt, type MarketContext } from './prompt-builder.js'
+import { buildPrompt, buildInsightPrompt, type MarketContext } from './prompt-builder.js'
 
 function makeContext(overrides: Partial<MarketContext> = {}): MarketContext {
   return {
@@ -177,5 +177,47 @@ describe('buildPrompt', () => {
       const ctx = makeContext({ vaultTvl: { conservative: 0 } })
       expect(() => buildPrompt(ctx)).not.toThrow()
     })
+  })
+})
+
+describe('buildInsightPrompt', () => {
+  const baseContext: MarketContext = {
+    vaultTvl: { moderate: 50_000, aggressive: 20_000 },
+    currentPositions: [
+      { name: 'drift-lending', allocation: 56.7 },
+      { name: 'drift-basis', allocation: 32.2 },
+    ],
+    fundingRates: { 'SOL-PERP': 0.003 },
+    lendingApy: 0.02,
+    insuranceYield: 0,
+    recentLiquidationVolume: 150_000,
+    oracleDeviation: { SOL: 0.12 },
+  }
+
+  it('asks for per-strategy confidence scores, not weights', () => {
+    const prompt = buildInsightPrompt(baseContext, ['drift-lending', 'drift-basis', 'drift-jito-dn'])
+    expect(prompt).toContain('confidence')
+    expect(prompt).toContain('0.0')
+    expect(prompt).toContain('1.0')
+    expect(prompt).not.toContain('sum to exactly 100')
+  })
+
+  it('includes risk_elevated field in example', () => {
+    const prompt = buildInsightPrompt(baseContext, ['drift-lending'])
+    expect(prompt).toContain('risk_elevated')
+  })
+
+  it('includes strategy names in prompt', () => {
+    const prompt = buildInsightPrompt(baseContext, ['drift-lending', 'drift-basis', 'drift-funding'])
+    expect(prompt).toContain('drift-lending')
+    expect(prompt).toContain('drift-basis')
+    expect(prompt).toContain('drift-funding')
+  })
+
+  it('includes market data', () => {
+    const prompt = buildInsightPrompt(baseContext, ['drift-lending'])
+    expect(prompt).toContain('50,000')
+    expect(prompt).toContain('LENDING APY')
+    expect(prompt).toContain('FUNDING RATES')
   })
 })
