@@ -32,6 +32,7 @@ export interface KeeperDataSource {
   getMarketScan?(): MarketScan | null
   getKeeperDecisions?(limit?: number): KeeperDecision[]
   getLatestYieldData?(): YieldData | null
+  getAIInsight?(): import('../ai/index.js').AIInsight | null
 }
 
 export function createApi(
@@ -90,6 +91,12 @@ export function createApi(
         respond(res, 200, {
           ...monitor.getStatus(),
           version: '0.1.0',
+        })
+      } else if (path === '/v1/ai') {
+        const insight = data.getAIInsight?.() ?? null
+        respond(res, 200, {
+          available: insight !== null,
+          insight,
         })
       } else {
         respond(res, 404, { error: 'Not found' })
