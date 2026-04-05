@@ -107,25 +107,23 @@ describe('Keeper', () => {
     expect(weights['moderate']).toBeDefined()
     expect(weights['aggressive']).toBeDefined()
 
-    // moderate has 3 backends (lending, basis, jito-dn)
+    // Both vaults have 2 backends (kamino-lending, marginfi-lending)
     const moderateKeys = Object.keys(weights['moderate']!)
-    expect(moderateKeys.length).toBeGreaterThanOrEqual(1)
+    expect(moderateKeys.length).toBe(2)
 
-    // aggressive has 4 backends (lending, basis, jito-dn, funding)
     const aggressiveKeys = Object.keys(weights['aggressive']!)
-    expect(aggressiveKeys.length).toBeGreaterThanOrEqual(1)
+    expect(aggressiveKeys.length).toBe(2)
   })
 
-  it('uses default yield data when no DriftDataCache is present', async () => {
+  it('uses fallback yield data when Kamino API is unreachable', async () => {
     mockFetchForCycle()
     await keeper.runCycle()
 
     const yieldData = keeper.getYieldData()
     expect(yieldData).not.toBeNull()
-    // Default values when no dataCache
-    expect(yieldData!.usdcLendingRate).toBe(0.02)
-    expect(yieldData!.solBorrowRate).toBe(0.05)
-    expect(yieldData!.jitoStakingYield).toBe(0.07)
+    // Fallback kamino rate + mock marginfi rate
+    expect(yieldData!.kaminoSupplyRate).toBe(0.021)
+    expect(yieldData!.marginfiLendingRate).toBe(0.065)
   })
 
   it('records decisions with timestamps', async () => {
@@ -162,26 +160,20 @@ describe('Keeper', () => {
     expect(scan!.driftComparison).toBeDefined()
   })
 
-  it('aggressive vault includes drift-funding backend', async () => {
+  it('both vaults include kamino-lending and marginfi-lending backends', async () => {
     mockFetchForCycle()
     await keeper.runCycle()
 
     const decisions = keeper.getDecisions()
     const aggressiveDecision = decisions.find(d => d.riskLevel === 'aggressive')
     expect(aggressiveDecision).toBeDefined()
-    // drift-funding score should be present
-    expect(aggressiveDecision!.proposal.scores['drift-funding']).toBeDefined()
-  })
+    expect(aggressiveDecision!.proposal.scores['kamino-lending']).toBeDefined()
+    expect(aggressiveDecision!.proposal.scores['marginfi-lending']).toBeDefined()
 
-  it('moderate vault does NOT include drift-funding backend', async () => {
-    mockFetchForCycle()
-    await keeper.runCycle()
-
-    const decisions = keeper.getDecisions()
     const moderateDecision = decisions.find(d => d.riskLevel === 'moderate')
     expect(moderateDecision).toBeDefined()
-    // drift-funding should not appear
-    expect(moderateDecision!.proposal.scores['drift-funding']).toBeUndefined()
+    expect(moderateDecision!.proposal.scores['kamino-lending']).toBeDefined()
+    expect(moderateDecision!.proposal.scores['marginfi-lending']).toBeDefined()
   })
 
   it('weights sum to 10000 bps per vault', async () => {
@@ -232,7 +224,7 @@ describe('AI cycle', () => {
     const mockAi = {
       isAvailable: true,
       analyze: vi.fn().mockResolvedValue(JSON.stringify({
-        strategies: { 'drift-lending': 0.9, 'drift-basis': 0.5 },
+        strategies: { 'kamino-lending': 0.9, 'marginfi-lending': 0.5 },
         risk_elevated: false,
         reasoning: 'Test insight.',
       })),
@@ -248,7 +240,7 @@ describe('AI cycle', () => {
     const insight = keeper.getAIInsight()
 
     expect(insight).not.toBeNull()
-    expect(insight?.strategies['drift-lending']).toBe(0.9)
+    expect(insight?.strategies['kamino-lending']).toBe(0.9)
     expect(insight?.riskElevated).toBe(false)
     expect(mockAi.analyze).toHaveBeenCalledOnce()
 
@@ -269,7 +261,7 @@ describe('AI cycle', () => {
 
     // First call succeeds
     mockAi.analyze.mockResolvedValueOnce(JSON.stringify({
-      strategies: { 'drift-lending': 0.9 },
+      strategies: { 'kamino-lending': 0.9 },
       risk_elevated: false,
       reasoning: 'Good.',
     }))
@@ -280,7 +272,7 @@ describe('AI cycle', () => {
     mockAi.analyze.mockRejectedValueOnce(new Error('fail'))
     await keeper.runAICycle()
     expect(keeper.getAIInsight()).not.toBeNull()
-    expect(keeper.getAIInsight()?.strategies['drift-lending']).toBe(0.9)
+    expect(keeper.getAIInsight()?.strategies['kamino-lending']).toBe(0.9)
 
     keeper.stop()
   })
@@ -310,7 +302,7 @@ describe('AI cycle', () => {
     const mockAi = {
       isAvailable: true,
       analyze: vi.fn().mockResolvedValue(JSON.stringify({
-        strategies: { 'drift-lending': 0.9, 'drift-basis': 0.7, 'drift-jito-dn': 0.8 },
+        strategies: { 'kamino-lending': 0.9, 'marginfi-lending': 0.8 },
         risk_elevated: false,
         reasoning: 'All stable.',
       })),

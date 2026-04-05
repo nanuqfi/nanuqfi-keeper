@@ -61,28 +61,27 @@ describe('PDA derivation', () => {
 describe('weightsToU16Array', () => {
   it('converts weight map to ordered u16 array', () => {
     const weights: Record<string, number> = {
-      'drift-lending': 5000,
-      'drift-basis': 3000,
-      'drift-jito-dn': 2000,
+      'kamino-lending': 6000,
+      'marginfi-lending': 4000,
     }
-    const backendOrder = ['drift-lending', 'drift-basis', 'drift-jito-dn']
+    const backendOrder = ['kamino-lending', 'marginfi-lending']
     const result = weightsToU16Array(weights, backendOrder)
 
-    expect(result).toEqual([5000, 3000, 2000])
+    expect(result).toEqual([6000, 4000])
   })
 
   it('fills missing backends with 0', () => {
     const weights: Record<string, number> = {
-      'drift-lending': 10000,
+      'kamino-lending': 10000,
     }
-    const backendOrder = ['drift-lending', 'drift-basis', 'drift-jito-dn']
+    const backendOrder = ['kamino-lending', 'marginfi-lending']
     const result = weightsToU16Array(weights, backendOrder)
 
-    expect(result).toEqual([10000, 0, 0])
+    expect(result).toEqual([10000, 0])
   })
 
   it('handles all-zero weights', () => {
-    const result = weightsToU16Array({}, ['drift-lending', 'drift-basis'])
+    const result = weightsToU16Array({}, ['kamino-lending', 'marginfi-lending'])
     expect(result).toEqual([0, 0])
   })
 

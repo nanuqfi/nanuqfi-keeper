@@ -13,11 +13,8 @@ const AI_HISTORY_PATH = process.env.AI_HISTORY_PATH ?? '/data/ai-history.json'
 const AI_HISTORY_MAX = 500
 
 export interface YieldData {
-  usdcLendingRate: number
-  solFundingRate: number
-  solFundingHistory: number[]
-  solBorrowRate: number
-  jitoStakingYield: number
+  kaminoSupplyRate: number
+  marginfiLendingRate: number
 }
 
 export interface KeeperDecision {
@@ -191,14 +188,14 @@ export class Keeper {
           name,
           allocation: bps / 100,
         })),
-        fundingRates: { 'SOL-PERP': yieldData.solFundingRate },
-        lendingApy: yieldData.usdcLendingRate,
+        fundingRates: {},
+        lendingApy: yieldData.kaminoSupplyRate,
         insuranceYield: 0,
         recentLiquidationVolume: 0,
         oracleDeviation: {},
       }
 
-      const strategyNames = ['drift-lending', 'drift-basis', 'drift-funding', 'drift-jito-dn']
+      const strategyNames = ['kamino-lending', 'marginfi-lending']
       const prompt = buildInsightPrompt(context, strategyNames)
       const rawResponse = await this.ai.analyze(prompt)
       const result = validateAIInsight(rawResponse)
@@ -326,81 +323,41 @@ export class Keeper {
   }
 
   private async fetchYieldData(): Promise<YieldData> {
-    if (!this.dataCache) {
-      // No Drift connection — return conservative defaults
-      return {
-        usdcLendingRate: 0.02,
-        solFundingRate: 0,
-        solFundingHistory: [],
-        solBorrowRate: 0.05,
-        jitoStakingYield: 0.07,
+    let kaminoRate = 0.021 // fallback
+    try {
+      const res = await fetch(
+        'https://api.kamino.finance/kamino-market/7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfF/reserves/metrics'
+      )
+      if (res.ok) {
+        const data = await res.json() as { liquidityToken: string; supplyApy: string }[]
+        const usdc = data.find(r => r.liquidityToken === 'USDC')
+        if (usdc) kaminoRate = Number(usdc.supplyApy)
       }
+    } catch {
+      // Use fallback rate
     }
 
-    const [depositRate, fundingRates, borrowRate] = await Promise.all([
-      this.dataCache.getDepositRate(0).catch(() => 0.02),
-      this.dataCache.getFundingRates('SOL-PERP').catch(() => []),
-      this.dataCache.getBorrowRate(1).catch(() => 0.05),
-    ])
-
-    const latestFunding = fundingRates.length > 0
-      ? fundingRates[fundingRates.length - 1]!.annualizedApr / 100
-      : 0
-
-    const fundingHistory = fundingRates.map(r => r.hourlyRate)
-
     return {
-      usdcLendingRate: depositRate,
-      solFundingRate: latestFunding,
-      solFundingHistory: fundingHistory,
-      solBorrowRate: borrowRate,
-      jitoStakingYield: 0.07, // Approximate — Jito API integration later
+      kaminoSupplyRate: kaminoRate,
+      marginfiLendingRate: 0.065, // Mock — Marginfi SDK has broken IDL
     }
   }
 
-  private buildBackendConfigs(data: YieldData, riskLevel: string): BackendConfig[] {
-    const configs: BackendConfig[] = [
+  private buildBackendConfigs(data: YieldData, _riskLevel: string): BackendConfig[] {
+    return [
       {
-        name: 'drift-lending',
-        apy: data.usdcLendingRate,
-        volatility: 0.05,
-        autoExitContext: { riskLevel },
+        name: 'kamino-lending',
+        apy: data.kaminoSupplyRate,
+        volatility: 0.03,
+        autoExitContext: { riskLevel: _riskLevel },
       },
       {
-        name: 'drift-basis',
-        apy: Math.abs(data.solFundingRate),
-        volatility: 0.20,
-        autoExitContext: {
-          riskLevel,
-          fundingHistory: data.solFundingHistory,
-        },
-      },
-      {
-        name: 'drift-jito-dn',
-        apy: Math.max(data.jitoStakingYield - data.solBorrowRate, 0),
-        volatility: 0.18,
-        autoExitContext: {
-          riskLevel,
-          solBorrowRate: data.solBorrowRate,
-          jitoStakingYield: data.jitoStakingYield,
-        },
+        name: 'marginfi-lending',
+        apy: data.marginfiLendingRate,
+        volatility: 0.04,
+        autoExitContext: { riskLevel: _riskLevel },
       },
     ]
-
-    // Funding capture only for aggressive
-    if (riskLevel === 'aggressive') {
-      configs.push({
-        name: 'drift-funding',
-        apy: data.solFundingRate,
-        volatility: 0.35,
-        autoExitContext: {
-          riskLevel,
-          unrealizedPnlPercent: 0,
-        },
-      })
-    }
-
-    return configs
   }
 
   private async checkRpc(): Promise<void> {

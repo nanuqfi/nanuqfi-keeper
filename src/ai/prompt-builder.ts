@@ -59,7 +59,7 @@ export function buildPrompt(context: MarketContext): string {
   // Ensure example sums to 100 for illustration
   const exampleJson = JSON.stringify(
     {
-      weights: backendNames.length > 0 ? exampleWeights : { 'drift-funding': 60, 'ranger-earn': 40 },
+      weights: backendNames.length > 0 ? exampleWeights : { 'kamino-lending': 60, 'marginfi-lending': 40 },
       confidence: 0.82,
       reasoning: 'Short explanation of your decision.',
     },
@@ -82,13 +82,13 @@ ${tvlLines}
 CURRENT POSITIONS (active allocations)
 ${positionLines}
 
-FUNDING RATES (Drift perpetuals)
-${fundingLines}
+LENDING RATES
+${fundingLines.replace('(none)', 'No external rate feeds')}
 
-LENDING APY
+KAMINO SUPPLY APY
   ${(lendingApy * 100).toFixed(4)}% annualised
 
-INSURANCE VAULT YIELD
+MARGINFI LENDING APY
   ${(insuranceYield * 100).toFixed(4)}% annualised
 
 RECENT LIQUIDATION VOLUME
@@ -101,7 +101,7 @@ ${deviationLines}
 TASK
 ═══════════════════════════════════════════════
 
-Analyse the above market state and recommend new allocation weights for all backends.
+Analyse the above market state and recommend new allocation weights for all lending backends.
 
 CONSTRAINTS:
   - Weights must be non-negative percentages (0-100)
@@ -176,10 +176,10 @@ ${tvlLines}
 CURRENT POSITIONS (active allocations)
 ${positionLines}
 
-FUNDING RATES (Drift perpetuals)
-${fundingLines}
+LENDING RATES
+${fundingLines.replace('(none)', 'No external rate feeds')}
 
-LENDING APY
+KAMINO SUPPLY APY
   ${(lendingApy * 100).toFixed(4)}% annualised
 
 RECENT LIQUIDATION VOLUME
@@ -192,7 +192,7 @@ ${deviationLines}
 TASK
 ═══════════════════════════════════════════════
 
-For each strategy below, rate your confidence (0.0 to 1.0) that it will sustain its current yield over the next 2-4 hours:
+For each lending strategy below, rate your confidence (0.0 to 1.0) that it will sustain its current yield over the next 2-4 hours:
 
 Strategies to evaluate: ${strategyNames.join(', ')}
 
@@ -202,11 +202,11 @@ CONFIDENCE SCALE:
   0.0 = yield unsustainable or dangerous, should exit
 
 Also assess:
-1. Whether there is a REGIME-LEVEL RISK (high liquidation volume, extreme oracle deviation, funding rate regime shift) that should reduce perpetual exposure across the board.
+1. Whether there is a REGIME-LEVEL RISK (high liquidation volume, extreme oracle deviation, or protocol instability) that should reduce exposure.
 2. The current MARKET REGIME — classify as one of:
-   - "trend": directional momentum detected (funding capture favored, basis trades riskier)
-   - "range": sideways/stable conditions (carry trades and lending favored)
-   - "stress": high volatility, liquidation cascades, or extreme deviations (de-risk all perps)
+   - "trend": directional momentum detected (lending rates may shift)
+   - "range": sideways/stable conditions (lending rates stable, favored)
+   - "stress": high volatility, liquidation cascades, or protocol risk (de-risk)
 
 RESPONSE FORMAT — respond ONLY with valid JSON, no markdown, no code fences, no prose:
 ${exampleJson}
