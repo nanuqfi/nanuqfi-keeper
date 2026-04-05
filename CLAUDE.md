@@ -11,12 +11,12 @@
 
 **Tech Stack:** TypeScript, Vitest, Anthropic SDK, Node.js 22+
 **Deployment:** Docker → VPS
-**Tests:** 156 passing across 10 test files
+**Tests:** 249 passing across 14 test files
 **Deploy:** VPS reclabs3, port 9000, keeper.nanuqfi.com
 
 **Key Commands:**
 ```bash
-pnpm test                       # run all 156 tests
+pnpm test                       # run all 249 tests
 pnpm build                      # compile TypeScript
 pnpm dev                        # run with tsx
 docker build -t nanuqfi-keeper . # Docker build
@@ -38,18 +38,30 @@ docker build -t nanuqfi-keeper . # Docker build
 | `src/health/api.ts` | REST API (7 read-only endpoints at `/v1/*`) |
 | `src/keeper.ts` | Main loop: boot sequence, cycle management, RPC failover |
 | `src/config.ts` | Environment-based configuration |
+| `src/alerts/telegram.ts` | Telegram Bot API alerting (failures, stress regime) |
+| `src/alerts/index.ts` | Alerter factory (Telegram or no-op fallback) |
+| `src/chain/rebalance.ts` | On-chain rebalance tx submission (PDA derivation, Anchor IX) |
+| `src/scanner/yield-scanner.ts` | Multi-protocol DeFi yield scanner (DeFi Llama + Drift) |
 
 ---
 
 ## Architecture
 
-### Two-Layer Design
-- **Layer 1: Algorithm Engine** — runs every cycle (5-15 min). Deterministic scoring, auto-exit checks, weight proposals.
-- **Layer 2: AI Reasoning** — runs on triggers (1-4h or event-driven). Claude API for market regime analysis, anomaly detection.
-- **Layer 0: Health** — always-on heartbeat, alerting, REST API for dashboard.
+### Multi-Layer Design
+- **Layer 1: Algorithm Engine** — runs every cycle (5-15 min). Deterministic scoring, auto-exit checks, weight proposals. Includes market scan integration (opportunity cost penalty), perp concentration cap (60%/70%), oracle divergence dampening, and funding slope prediction.
+- **Layer 2: AI Reasoning** — runs on triggers (1-4h or event-driven). Claude API for market regime classification (trend/range/stress), per-strategy confidence scoring, risk assessment.
+- **Layer 3: On-Chain Submission** — submits rebalance transactions to the allocator program. PDA derivation, weight serialization, reasoning hash. Fire-and-forget (failures alert, don't crash).
+- **Layer 0: Health + Alerts** — always-on heartbeat, Telegram alerting (cycle failures, stress regime, tx failures), REST API for dashboard.
 
 ### AI Layer Contract
 AI is ADVISORY only. It proposes → algorithm validates → on-chain program enforces. AI cannot execute transactions, override vetoes, or bypass guardrails.
+
+### Advanced Scoring Features
+- **Market scan integration** — opportunity cost penalty (0.7x) when external protocol yields >2x Drift
+- **Correlation-aware sizing** — perp concentration cap enforced pre-submission (moderate: 60%, aggressive: 70%)
+- **AI regime detection** — trend/range/stress with per-strategy multipliers
+- **Oracle divergence guard** — SOL oracle >1%: 0.5x, >3%: 0.1x dampening
+- **Predictive auto-exit** — funding rate slope analysis, yellow-light dampening
 
 ### Auto-Exit Triggers
 | Strategy | Trigger |
@@ -83,4 +95,4 @@ See `.env.example` for all required variables. Secrets go in `~/Documents/secret
 
 ---
 
-**Last Updated:** 2026-03-15
+**Last Updated:** 2026-04-05
