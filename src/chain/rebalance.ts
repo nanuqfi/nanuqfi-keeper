@@ -15,10 +15,8 @@ const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ
 
 // Canonical backend ordering — must match on-chain strategy slot indices
 const DEFAULT_BACKEND_ORDER = [
-  'drift-lending',
-  'drift-basis',
-  'drift-jito-dn',
-  'drift-funding',
+  'kamino-lending',
+  'marginfi-lending',
 ]
 
 // ─── PDA Derivation ──────────────────────────────────────────────────────

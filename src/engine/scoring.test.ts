@@ -38,9 +38,9 @@ describe('computeRiskAdjustedScore', () => {
 
 describe('rankYieldSources', () => {
   const sources: YieldSource[] = [
-    { name: 'drift-funding', apy: 0.12, volatility: 0.08 },
-    { name: 'drift-basis', apy: 0.20, volatility: 0.06 },
-    { name: 'drift-insurance', apy: 0.08, volatility: 0.02 },
+    { name: 'kamino-lending', apy: 0.12, volatility: 0.08 },
+    { name: 'marginfi-lending', apy: 0.20, volatility: 0.06 },
+    { name: 'marginfi-staking', apy: 0.08, volatility: 0.02 },
   ]
 
   it('returns array of same length with riskAdjustedScore attached', () => {

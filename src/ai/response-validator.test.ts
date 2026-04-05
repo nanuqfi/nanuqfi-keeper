@@ -4,9 +4,9 @@ import { validateAIResponse, type ValidationResult, validateAIInsight } from './
 // Helper: build a minimal valid payload
 function validPayload(overrides: Record<string, unknown> = {}): string {
   return JSON.stringify({
-    weights: { 'drift-funding': 60, 'ranger-earn': 40 },
+    weights: { 'kamino-lending': 60, 'marginfi-lending': 40 },
     confidence: 0.85,
-    reasoning: 'Funding rates are elevated; allocating majority to drift-funding.',
+    reasoning: 'Funding rates are elevated; allocating majority to kamino-lending.',
     ...overrides,
   })
 }
@@ -17,7 +17,7 @@ describe('validateAIResponse', () => {
       const result = validateAIResponse(validPayload())
       expect(result.valid).toBe(true)
       expect(result.suggestion).toBeDefined()
-      expect(result.suggestion!.weights).toEqual({ 'drift-funding': 60, 'ranger-earn': 40 })
+      expect(result.suggestion!.weights).toEqual({ 'kamino-lending': 60, 'marginfi-lending': 40 })
       expect(result.suggestion!.confidence).toBe(0.85)
       expect(result.suggestion!.reasoning).toBeTruthy()
       expect(result.rejectionReason).toBeUndefined()
@@ -228,42 +228,42 @@ describe('validateAIResponse', () => {
 describe('validateAIInsight', () => {
   it('accepts a well-formed insight', () => {
     const raw = JSON.stringify({
-      strategies: { 'drift-lending': 0.95, 'drift-basis': 0.6 },
+      strategies: { 'kamino-lending': 0.95, 'marginfi-lending': 0.6 },
       risk_elevated: false,
       reasoning: 'Lending stable, basis narrowing.',
     })
     const result = validateAIInsight(raw)
     expect(result.valid).toBe(true)
-    expect(result.insight?.strategies['drift-lending']).toBe(0.95)
+    expect(result.insight?.strategies['kamino-lending']).toBe(0.95)
     expect(result.insight?.riskElevated).toBe(false)
     expect(result.insight?.reasoning).toBe('Lending stable, basis narrowing.')
   })
 
   it('rejects confidence > 1', () => {
     const raw = JSON.stringify({
-      strategies: { 'drift-lending': 1.5 },
+      strategies: { 'kamino-lending': 1.5 },
       risk_elevated: false,
       reasoning: 'Test.',
     })
     const result = validateAIInsight(raw)
     expect(result.valid).toBe(false)
-    expect(result.rejectionReason).toContain('drift-lending')
+    expect(result.rejectionReason).toContain('kamino-lending')
   })
 
   it('rejects confidence < 0', () => {
     const raw = JSON.stringify({
-      strategies: { 'drift-lending': -0.1 },
+      strategies: { 'kamino-lending': -0.1 },
       risk_elevated: false,
       reasoning: 'Test.',
     })
     const result = validateAIInsight(raw)
     expect(result.valid).toBe(false)
-    expect(result.rejectionReason).toContain('drift-lending')
+    expect(result.rejectionReason).toContain('kamino-lending')
   })
 
   it('rejects non-boolean risk_elevated', () => {
     const raw = JSON.stringify({
-      strategies: { 'drift-lending': 0.9 },
+      strategies: { 'kamino-lending': 0.9 },
       risk_elevated: 'yes',
       reasoning: 'Test.',
     })
@@ -284,7 +284,7 @@ describe('validateAIInsight', () => {
 
   it('rejects empty reasoning', () => {
     const raw = JSON.stringify({
-      strategies: { 'drift-lending': 0.9 },
+      strategies: { 'kamino-lending': 0.9 },
       risk_elevated: false,
       reasoning: '  ',
     })
@@ -313,7 +313,7 @@ describe('validateAIInsight', () => {
   // Phase 1C — regime detection
   it('accepts valid regime field (trend)', () => {
     const raw = JSON.stringify({
-      strategies: { 'drift-lending': 0.9 },
+      strategies: { 'kamino-lending': 0.9 },
       risk_elevated: false,
       regime: 'trend',
       reasoning: 'Directional momentum detected.',
@@ -325,7 +325,7 @@ describe('validateAIInsight', () => {
 
   it('accepts valid regime field (range)', () => {
     const raw = JSON.stringify({
-      strategies: { 'drift-lending': 0.9 },
+      strategies: { 'kamino-lending': 0.9 },
       risk_elevated: false,
       regime: 'range',
       reasoning: 'Sideways market.',
@@ -337,7 +337,7 @@ describe('validateAIInsight', () => {
 
   it('accepts valid regime field (stress)', () => {
     const raw = JSON.stringify({
-      strategies: { 'drift-lending': 0.9 },
+      strategies: { 'kamino-lending': 0.9 },
       risk_elevated: true,
       regime: 'stress',
       reasoning: 'Liquidation cascade.',
@@ -349,7 +349,7 @@ describe('validateAIInsight', () => {
 
   it('rejects invalid regime value', () => {
     const raw = JSON.stringify({
-      strategies: { 'drift-lending': 0.9 },
+      strategies: { 'kamino-lending': 0.9 },
       risk_elevated: false,
       regime: 'bull',
       reasoning: 'Not a valid regime.',
@@ -361,7 +361,7 @@ describe('validateAIInsight', () => {
 
   it('accepts missing regime field (optional)', () => {
     const raw = JSON.stringify({
-      strategies: { 'drift-lending': 0.9 },
+      strategies: { 'kamino-lending': 0.9 },
       risk_elevated: false,
       reasoning: 'No regime specified.',
     })

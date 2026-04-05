@@ -54,7 +54,7 @@ describe('AIProvider', () => {
   describe('analyze — happy path', () => {
     it('returns the raw response text from Claude', async () => {
       const provider = new AIProvider(makeConfig())
-      const expected = '{"weights":{"drift-funding":100},"confidence":0.9,"reasoning":"High funding rate."}'
+      const expected = '{"weights":{"kamino-lending":60,"marginfi-lending":40},"confidence":0.9,"reasoning":"Lending rates stable."}'
       mockSuccess(expected)
 
       const result = await provider.analyze('Test prompt')

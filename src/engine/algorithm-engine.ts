@@ -3,17 +3,15 @@ import { checkAutoExit, type AutoExitContext } from './auto-exit.js'
 import type { AIInsight } from '../ai/index.js'
 import type { MarketScan } from '../scanner/index.js'
 
-const PERP_STRATEGIES = new Set(['drift-basis', 'drift-funding', 'drift-jito-dn'])
+const PERP_STRATEGIES = new Set<string>()
 
 // SOL-exposed strategies affected by oracle divergence
-const SOL_EXPOSED = new Set(['drift-basis', 'drift-funding', 'drift-jito-dn'])
+const SOL_EXPOSED = new Set<string>()
 
 // Backend → risk tier mapping for market scan comparison
 const BACKEND_RISK_TIER: Record<string, 'low' | 'medium' | 'high'> = {
-  'drift-lending': 'low',
-  'drift-basis': 'medium',
-  'drift-jito-dn': 'medium',
-  'drift-funding': 'high',
+  'kamino-lending': 'low',
+  'marginfi-lending': 'low',
 }
 
 // Max perp allocation per risk level (basis points)
@@ -23,7 +21,7 @@ const PERP_CAP_BPS: Record<string, number> = {
   aggressive: 7000,
 }
 
-const LENDING_BACKEND = 'drift-lending'
+const LENDING_BACKEND = 'kamino-lending'
 
 export interface ProposalContext {
   marketScan?: MarketScan
@@ -109,10 +107,7 @@ export class AlgorithmEngine {
         }
       }
 
-      // Funding slope dampening (Phase 2B)
-      if (backend.name === 'drift-basis' && backend.autoExitContext.fundingHistory) {
-        score *= computeFundingSlopeDampening(backend.autoExitContext.fundingHistory)
-      }
+      // Funding slope dampening (Phase 2B) — no longer applicable with lending-only backends
 
       scores[backend.name] = score
 
@@ -230,9 +225,9 @@ function computeOpportunityCostMultiplier(backend: BackendConfig, scan: MarketSc
 /** Phase 1C: regime-based multiplier per strategy */
 function getRegimeMultiplier(backendName: string, regime: 'trend' | 'range' | 'stress'): number {
   const REGIME_MULTIPLIERS: Record<string, Record<string, number>> = {
-    trend: { 'drift-funding': 1.3, 'drift-basis': 0.7, 'drift-jito-dn': 0.9 },
-    range: { 'drift-lending': 1.2, 'drift-basis': 1.2, 'drift-funding': 0.5, 'drift-jito-dn': 1.1 },
-    stress: { 'drift-lending': 1.5, 'drift-basis': 0.3, 'drift-funding': 0.3, 'drift-jito-dn': 0.3 },
+    trend: { 'kamino-lending': 1.0, 'marginfi-lending': 1.0 },
+    range: { 'kamino-lending': 1.2, 'marginfi-lending': 1.2 },
+    stress: { 'kamino-lending': 1.5, 'marginfi-lending': 1.5 },
   }
   return REGIME_MULTIPLIERS[regime]?.[backendName] ?? 1.0
 }

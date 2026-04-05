@@ -144,16 +144,13 @@ describe('Keeper REST API — enriched endpoints', () => {
       {
         timestamp: 1710500000000,
         riskLevel: 'moderate',
-        proposal: { weights: { 'drift-lending': 5000, 'drift-basis': 3000, 'drift-jito-dn': 2000 }, excludedBackends: [], scores: { 'drift-lending': 0.4, 'drift-basis': 0.3 } },
-        yieldData: { usdcLendingRate: 0.02, solFundingRate: 0, solFundingHistory: [], solBorrowRate: 0.05, jitoStakingYield: 0.07 },
+        proposal: { weights: { 'kamino-lending': 6000, 'marginfi-lending': 4000 }, excludedBackends: [], scores: { 'kamino-lending': 0.4, 'marginfi-lending': 0.3 } },
+        yieldData: { kaminoSupplyRate: 0.021, marginfiLendingRate: 0.065 },
       },
     ].slice(0, limit),
     getLatestYieldData: () => ({
-      usdcLendingRate: 0.02,
-      solFundingRate: 0.001,
-      solFundingHistory: [],
-      solBorrowRate: 0.05,
-      jitoStakingYield: 0.07,
+      kaminoSupplyRate: 0.021,
+      marginfiLendingRate: 0.065,
     }),
   }
 
@@ -214,7 +211,7 @@ describe('Keeper REST API — enriched endpoints', () => {
     // Live data merged
     expect(yields).toHaveProperty('live')
     const live = yields.live as Record<string, unknown>
-    expect(live).toHaveProperty('usdcLendingRate', 0.02)
-    expect(live).toHaveProperty('jitoStakingYield', 0.07)
+    expect(live).toHaveProperty('kaminoSupplyRate', 0.021)
+    expect(live).toHaveProperty('marginfiLendingRate', 0.065)
   })
 })
