@@ -4,6 +4,8 @@ import { HealthMonitor } from './health/monitor.js'
 import { initDriftClient, checkDriftHealth, DriftDataCache } from './drift/index.js'
 import { AlgorithmEngine, type BackendConfig, type VaultState, type WeightProposal, type ProposalContext } from './engine/index.js'
 import { scanDeFiYields, type MarketScan } from './scanner/index.js'
+import { createAlerter, type Alerter } from './alerts/index.js'
+import { submitRebalance, riskLevelToIndex, type RebalanceResult } from './chain/index.js'
 import type { DriftClient } from '@drift-labs/sdk'
 import { AIProvider, buildInsightPrompt, validateAIInsight, type AIInsight, type MarketContext } from './ai/index.js'
 
@@ -24,6 +26,7 @@ export interface KeeperDecision {
   proposal: WeightProposal
   yieldData: YieldData
   aiInsight?: AIInsight
+  txSignature?: string
 }
 
 export interface KeeperDeps {
@@ -38,6 +41,7 @@ export class Keeper {
   private readonly config: KeeperConfig
   private readonly monitor: HealthMonitor
   private readonly engine: AlgorithmEngine
+  private readonly alerter: Alerter
   private driftClient?: DriftClient
   private dataCache?: DriftDataCache
   private ai: AIProvider | null
@@ -59,6 +63,7 @@ export class Keeper {
     this.dataCache = deps.dataCache
     this.ai = deps.ai ?? null
     this.engine = new AlgorithmEngine()
+    this.alerter = createAlerter(deps.config)
   }
 
   async boot(): Promise<void> {
@@ -200,12 +205,17 @@ export class Keeper {
 
       if (result.valid && result.insight) {
         this.cachedInsight = { ...result.insight, timestamp: Date.now() }
-        console.log(`[AI] Insight cached — risk_elevated: ${result.insight.riskElevated}, reasoning: ${result.insight.reasoning}`)
+        console.log(`[AI] Insight cached — risk_elevated: ${result.insight.riskElevated}, regime: ${result.insight.regime ?? 'none'}, reasoning: ${result.insight.reasoning}`)
         this.aiHistory.push(this.cachedInsight)
         if (this.aiHistory.length > AI_HISTORY_MAX) {
           this.aiHistory = this.aiHistory.slice(-AI_HISTORY_MAX)
         }
         this.saveAIHistory()
+
+        // Alert on stress regime
+        if (result.insight.regime === 'stress') {
+          this.alerter.alert(`⚠️ STRESS REGIME detected\n${result.insight.reasoning}`).catch(() => {})
+        }
       } else {
         console.warn(`[AI] Invalid response rejected: ${result.rejectionReason}`)
       }
@@ -269,8 +279,33 @@ export class Keeper {
           this.decisions = this.decisions.slice(-this.maxDecisionHistory)
         }
 
-        // TODO: Submit rebalance tx to on-chain allocator
-        // TODO: Execute strategy trades based on weight changes
+        // Submit rebalance tx to on-chain allocator (if keypair configured)
+        if (this.config.keeperKeypairPath && this.config.rpcUrls[0]) {
+          const reasoning = this.getAIInsight()?.reasoning ?? 'Algorithm-only rebalance'
+          submitRebalance({
+            rpcUrl: this.config.rpcUrls[0],
+            keypairPath: this.config.keeperKeypairPath,
+            riskLevel,
+            weights: proposal.weights,
+            reasoning,
+            rebalanceCounter: this.decisions.length,
+            equitySnapshot: 0n,
+            vaultUsdcAddress: new (await import('@solana/web3.js')).PublicKey('11111111111111111111111111111111'),
+            treasuryUsdcAddress: new (await import('@solana/web3.js')).PublicKey('11111111111111111111111111111111'),
+          }).then(result => {
+            if (result.success) {
+              console.log(`[Chain] Rebalance tx submitted: ${result.txSignature}`)
+              // Store tx in the latest decision
+              const lastDecision = this.decisions[this.decisions.length - 1]
+              if (lastDecision) lastDecision.txSignature = result.txSignature
+            } else {
+              console.warn(`[Chain] Rebalance tx failed: ${result.error}`)
+              this.alerter.alert(`❌ On-chain rebalance failed: ${result.error}`).catch(() => {})
+            }
+          }).catch(err => {
+            console.warn(`[Chain] Rebalance submission error: ${err instanceof Error ? err.message : err}`)
+          })
+        }
       }
 
       // 5. Record success
@@ -279,10 +314,11 @@ export class Keeper {
     } catch (error) {
       if (controller.signal.aborted) {
         this.monitor.recordCycleFailure('Cycle timeout (60s)')
+        this.alerter.alert('⏱️ Keeper cycle timed out (60s)').catch(() => {})
       } else {
-        this.monitor.recordCycleFailure(
-          error instanceof Error ? error.message : 'Unknown error'
-        )
+        const msg = error instanceof Error ? error.message : 'Unknown error'
+        this.monitor.recordCycleFailure(msg)
+        this.alerter.alert(`❌ Keeper cycle failed: ${msg}`).catch(() => {})
       }
     } finally {
       clearTimeout(timeout)
