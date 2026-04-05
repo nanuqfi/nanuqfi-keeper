@@ -16,4 +16,5 @@ export {
   type BackendConfig,
   type VaultState,
   type WeightProposal,
+  type ProposalContext,
 } from './algorithm-engine.js'

@@ -1,5 +1,5 @@
 export type { AIWeightSuggestion, ValidationResult } from './response-validator.js'
-export type { AIInsight, InsightValidationResult } from './response-validator.js'
+export type { AIInsight, InsightValidationResult, MarketRegime } from './response-validator.js'
 export { validateAIResponse, validateAIInsight } from './response-validator.js'
 
 export type { MarketContext } from './prompt-builder.js'

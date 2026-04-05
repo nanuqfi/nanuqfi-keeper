@@ -94,9 +94,12 @@ export function validateAIResponse(raw: string): ValidationResult {
 
 // ─── AIInsight (confidence-based, replaces weight-based suggestion) ─────
 
+export type MarketRegime = 'trend' | 'range' | 'stress'
+
 export interface AIInsight {
   strategies: Record<string, number>  // per-strategy confidence 0.0–1.0
   riskElevated: boolean               // cross-cutting risk flag
+  regime?: MarketRegime               // detected market regime
   reasoning: string                   // human-readable explanation
   timestamp: number                   // set by caller, not validated here
 }
@@ -148,7 +151,17 @@ export function validateAIInsight(raw: string): InsightValidationResult {
     return { valid: false, rejectionReason: 'Field "risk_elevated" must be a boolean' }
   }
 
-  // 3. reasoning
+  // 3. regime (optional)
+  const VALID_REGIMES = new Set(['trend', 'range', 'stress'])
+  let regime: MarketRegime | undefined
+  if ('regime' in obj) {
+    if (typeof obj['regime'] !== 'string' || !VALID_REGIMES.has(obj['regime'])) {
+      return { valid: false, rejectionReason: `Field "regime" must be one of: trend, range, stress` }
+    }
+    regime = obj['regime'] as MarketRegime
+  }
+
+  // 4. reasoning
   if (!('reasoning' in obj)) {
     return { valid: false, rejectionReason: 'Missing required field: reasoning' }
   }
@@ -161,6 +174,7 @@ export function validateAIInsight(raw: string): InsightValidationResult {
     insight: {
       strategies: stratMap as Record<string, number>,
       riskElevated: obj['risk_elevated'] as boolean,
+      regime,
       reasoning: obj['reasoning'] as string,
       timestamp: 0, // caller sets this
     },

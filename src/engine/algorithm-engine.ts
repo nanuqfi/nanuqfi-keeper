@@ -1,8 +1,34 @@
 import { computeRiskAdjustedScore, type YieldSource } from './scoring.js'
 import { checkAutoExit, type AutoExitContext } from './auto-exit.js'
 import type { AIInsight } from '../ai/index.js'
+import type { MarketScan } from '../scanner/index.js'
 
 const PERP_STRATEGIES = new Set(['drift-basis', 'drift-funding', 'drift-jito-dn'])
+
+// SOL-exposed strategies affected by oracle divergence
+const SOL_EXPOSED = new Set(['drift-basis', 'drift-funding', 'drift-jito-dn'])
+
+// Backend → risk tier mapping for market scan comparison
+const BACKEND_RISK_TIER: Record<string, 'low' | 'medium' | 'high'> = {
+  'drift-lending': 'low',
+  'drift-basis': 'medium',
+  'drift-jito-dn': 'medium',
+  'drift-funding': 'high',
+}
+
+// Max perp allocation per risk level (basis points)
+const PERP_CAP_BPS: Record<string, number> = {
+  conservative: 3000,
+  moderate: 6000,
+  aggressive: 7000,
+}
+
+const LENDING_BACKEND = 'drift-lending'
+
+export interface ProposalContext {
+  marketScan?: MarketScan
+  oracleDeviation?: Record<string, number>
+}
 
 export interface BackendConfig {
   name: string
@@ -32,12 +58,13 @@ export interface WeightProposal {
  *
  * Each cycle:
  *  1. Evaluate auto-exit for every backend.
- *  2. Score the surviving backends.
+ *  2. Score the surviving backends (with AI, market scan, oracle, and slope modifiers).
  *  3. Allocate proportionally to risk-adjusted score, rounding to whole bps.
+ *  4. Enforce perp concentration cap — redistribute overflow to lending.
  *     Any rounding remainder is added to the highest-scoring backend.
  */
 export class AlgorithmEngine {
-  propose(state: VaultState, aiInsight?: AIInsight): WeightProposal {
+  propose(state: VaultState, aiInsight?: AIInsight, ctx?: ProposalContext): WeightProposal {
     const excluded: string[] = []
     const scores: Record<string, number> = {}
 
@@ -52,14 +79,39 @@ export class AlgorithmEngine {
 
       const rawScore = computeRiskAdjustedScore(backend.apy, backend.volatility)
 
-      // Apply AI confidence multiplier
       let score = rawScore
+
+      // AI confidence multiplier
       if (aiInsight) {
         const confidence = aiInsight.strategies[backend.name] ?? 1.0
         score *= confidence
         if (aiInsight.riskElevated && PERP_STRATEGIES.has(backend.name)) {
           score *= 0.5
         }
+        // Regime multipliers
+        if (aiInsight.regime) {
+          score *= getRegimeMultiplier(backend.name, aiInsight.regime)
+        }
+      }
+
+      // Market scan opportunity cost penalty (Phase 1A)
+      if (ctx?.marketScan) {
+        score *= computeOpportunityCostMultiplier(backend, ctx.marketScan)
+      }
+
+      // Oracle divergence dampening (Phase 2A)
+      if (ctx?.oracleDeviation && SOL_EXPOSED.has(backend.name)) {
+        const solDev = ctx.oracleDeviation['SOL'] ?? 0
+        if (solDev > 0.03) {
+          score *= 0.1
+        } else if (solDev > 0.01) {
+          score *= 0.5
+        }
+      }
+
+      // Funding slope dampening (Phase 2B)
+      if (backend.name === 'drift-basis' && backend.autoExitContext.fundingHistory) {
+        score *= computeFundingSlopeDampening(backend.autoExitContext.fundingHistory)
       }
 
       scores[backend.name] = score
@@ -77,17 +129,25 @@ export class AlgorithmEngine {
     }
 
     // Step 3 — proportional allocation in basis points
+    const weights = this.allocateWeights(surviving)
+
+    // Step 4 — enforce perp concentration cap (Phase 1B)
+    this.enforcePerCap(weights, state.riskLevel, surviving)
+
+    return { weights, excludedBackends: excluded, scores }
+  }
+
+  private allocateWeights(surviving: Array<{ name: string; score: number }>): Record<string, number> {
     const totalScore = surviving.reduce((sum, b) => sum + b.score, 0)
 
     if (totalScore === 0) {
-      // All surviving backends scored 0 (e.g. all APY ≤ 0) — distribute equally
       const equalShare = Math.floor(10_000 / surviving.length)
       const remainder = 10_000 - equalShare * surviving.length
       const weights: Record<string, number> = {}
       surviving.forEach((b, i) => {
         weights[b.name] = equalShare + (i === 0 ? remainder : 0)
       })
-      return { weights, excludedBackends: excluded, scores }
+      return weights
     }
 
     const rawWeights = surviving.map(b => ({
@@ -98,9 +158,7 @@ export class AlgorithmEngine {
     const allocatedSum = rawWeights.reduce((sum, w) => sum + w.bps, 0)
     const remainder = 10_000 - allocatedSum
 
-    // Add remainder to the highest-scoring backend (first after sort)
     if (remainder > 0 && rawWeights.length > 0) {
-      // Find highest-score backend among survivors
       const highestIdx = surviving.reduce(
         (maxIdx, b, i) => (b.score > surviving[maxIdx]!.score ? i : maxIdx),
         0
@@ -110,7 +168,106 @@ export class AlgorithmEngine {
 
     const weights: Record<string, number> = {}
     rawWeights.forEach(w => { weights[w.name] = w.bps })
-
-    return { weights, excludedBackends: excluded, scores }
+    return weights
   }
+
+  private enforcePerCap(
+    weights: Record<string, number>,
+    riskLevel: string,
+    surviving: Array<{ name: string; score: number }>,
+  ): void {
+    const cap = PERP_CAP_BPS[riskLevel] ?? PERP_CAP_BPS['moderate']!
+    const perpNames = surviving.filter(b => PERP_STRATEGIES.has(b.name)).map(b => b.name)
+    const lendingPresent = LENDING_BACKEND in weights
+
+    if (perpNames.length === 0 || !lendingPresent) return
+
+    const perpTotal = perpNames.reduce((sum, n) => sum + (weights[n] ?? 0), 0)
+    if (perpTotal <= cap) return
+
+    // Scale perp strategies proportionally to fit cap
+    const scaleFactor = cap / perpTotal
+    let overflow = 0
+
+    for (const name of perpNames) {
+      const original = weights[name] ?? 0
+      const scaled = Math.floor(original * scaleFactor)
+      overflow += original - scaled
+      weights[name] = scaled
+    }
+
+    // Redistribute overflow to lending
+    weights[LENDING_BACKEND] = (weights[LENDING_BACKEND] ?? 0) + overflow
+
+    // Fix rounding: ensure sum is exactly 10 000
+    const total = Object.values(weights).reduce((s, v) => s + v, 0)
+    if (total !== 10_000) {
+      weights[LENDING_BACKEND] += 10_000 - total
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Scoring modifiers
+// ---------------------------------------------------------------------------
+
+/** Phase 1A: opportunity cost penalty when better yields exist elsewhere */
+function computeOpportunityCostMultiplier(backend: BackendConfig, scan: MarketScan): number {
+  const tier = BACKEND_RISK_TIER[backend.name]
+  if (!tier) return 1.0
+
+  const bestExternal = scan.bestByRisk[tier]
+  if (!bestExternal) return 1.0
+
+  // Only penalize if external protocol is different from Drift
+  if (bestExternal.protocol === 'Drift') return 1.0
+
+  const ratio = bestExternal.apy / Math.max(backend.apy, 0.0001)
+  if (ratio > 2) return 0.7
+  return 1.0
+}
+
+/** Phase 1C: regime-based multiplier per strategy */
+function getRegimeMultiplier(backendName: string, regime: 'trend' | 'range' | 'stress'): number {
+  const REGIME_MULTIPLIERS: Record<string, Record<string, number>> = {
+    trend: { 'drift-funding': 1.3, 'drift-basis': 0.7, 'drift-jito-dn': 0.9 },
+    range: { 'drift-lending': 1.2, 'drift-basis': 1.2, 'drift-funding': 0.5, 'drift-jito-dn': 1.1 },
+    stress: { 'drift-lending': 1.5, 'drift-basis': 0.3, 'drift-funding': 0.3, 'drift-jito-dn': 0.3 },
+  }
+  return REGIME_MULTIPLIERS[regime]?.[backendName] ?? 1.0
+}
+
+/**
+ * Phase 2B: dampen drift-basis when funding rate is trending toward zero.
+ * Computes linear regression slope over last 8 periods. If slope is strongly
+ * negative AND latest funding < 2bps, apply 0.5x dampening.
+ */
+function computeFundingSlopeDampening(history: number[]): number {
+  if (history.length < 8) return 1.0
+
+  const window = history.slice(-8)
+  const n = window.length
+
+  // Linear regression slope: Σ((x - x̄)(y - ȳ)) / Σ((x - x̄)²)
+  const xMean = (n - 1) / 2
+  const yMean = window.reduce((s, v) => s + v, 0) / n
+
+  let numerator = 0
+  let denominator = 0
+  for (let i = 0; i < n; i++) {
+    const dx = i - xMean
+    numerator += dx * (window[i]! - yMean)
+    denominator += dx * dx
+  }
+
+  if (denominator === 0) return 1.0
+  const slope = numerator / denominator
+
+  const latestFunding = window[n - 1]!
+  // Yellow light: slope strongly negative AND latest funding near zero (<2bps)
+  if (slope < -0.00002 && latestFunding < 0.0002) {
+    return 0.5
+  }
+
+  return 1.0
 }

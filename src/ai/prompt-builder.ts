@@ -154,6 +154,7 @@ export function buildInsightPrompt(
     {
       strategies: exampleStrategies,
       risk_elevated: false,
+      regime: 'range',
       reasoning: 'Short explanation of sustainability assessment.',
     },
     null,
@@ -200,7 +201,12 @@ CONFIDENCE SCALE:
   0.5 = uncertain, expect yield to decline
   0.0 = yield unsustainable or dangerous, should exit
 
-Also assess whether there is a REGIME-LEVEL RISK (high liquidation volume, extreme oracle deviation, funding rate regime shift) that should reduce perpetual exposure across the board.
+Also assess:
+1. Whether there is a REGIME-LEVEL RISK (high liquidation volume, extreme oracle deviation, funding rate regime shift) that should reduce perpetual exposure across the board.
+2. The current MARKET REGIME — classify as one of:
+   - "trend": directional momentum detected (funding capture favored, basis trades riskier)
+   - "range": sideways/stable conditions (carry trades and lending favored)
+   - "stress": high volatility, liquidation cascades, or extreme deviations (de-risk all perps)
 
 RESPONSE FORMAT — respond ONLY with valid JSON, no markdown, no code fences, no prose:
 ${exampleJson}

@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import type { KeeperConfig } from './config.js'
 import { HealthMonitor } from './health/monitor.js'
 import { initDriftClient, checkDriftHealth, DriftDataCache } from './drift/index.js'
-import { AlgorithmEngine, type BackendConfig, type VaultState, type WeightProposal } from './engine/index.js'
+import { AlgorithmEngine, type BackendConfig, type VaultState, type WeightProposal, type ProposalContext } from './engine/index.js'
 import { scanDeFiYields, type MarketScan } from './scanner/index.js'
 import type { DriftClient } from '@drift-labs/sdk'
 import { AIProvider, buildInsightPrompt, validateAIInsight, type AIInsight, type MarketContext } from './ai/index.js'
@@ -230,7 +230,17 @@ export class Keeper {
       const yieldData = await this.fetchYieldData()
       this.latestYieldData = yieldData
 
-      // 3. Run algorithm engine for each vault (moderate + aggressive)
+      // 3. Scan DeFi yields BEFORE proposing — feeds opportunity cost into scoring
+      const marketScan = await scanDeFiYields()
+      this.latestMarketScan = marketScan
+
+      // 4. Build proposal context with market scan + oracle data
+      const proposalCtx: ProposalContext = {
+        marketScan,
+        oracleDeviation: this.cachedInsight ? {} : undefined,
+      }
+
+      // 5. Run algorithm engine for each vault (moderate + aggressive)
       const vaults = ['moderate', 'aggressive'] as const
       for (const riskLevel of vaults) {
         const backends = this.buildBackendConfigs(yieldData, riskLevel)
@@ -240,7 +250,7 @@ export class Keeper {
           currentWeights: this.currentWeights[riskLevel] ?? {},
         }
 
-        const proposal = this.engine.propose(state, this.getAIInsight() ?? undefined)
+        const proposal = this.engine.propose(state, this.getAIInsight() ?? undefined, proposalCtx)
 
         // Log the decision
         this.decisions.push({
@@ -262,10 +272,6 @@ export class Keeper {
         // TODO: Submit rebalance tx to on-chain allocator
         // TODO: Execute strategy trades based on weight changes
       }
-
-      // 4. Scan DeFi yields (multi-protocol awareness)
-      const marketScan = await scanDeFiYields()
-      this.latestMarketScan = marketScan
 
       // 5. Record success
       this.monitor.recordCycleSuccess()

@@ -309,4 +309,64 @@ describe('validateAIInsight', () => {
     expect(result.valid).toBe(true)
     expect(result.insight?.riskElevated).toBe(true)
   })
+
+  // Phase 1C — regime detection
+  it('accepts valid regime field (trend)', () => {
+    const raw = JSON.stringify({
+      strategies: { 'drift-lending': 0.9 },
+      risk_elevated: false,
+      regime: 'trend',
+      reasoning: 'Directional momentum detected.',
+    })
+    const result = validateAIInsight(raw)
+    expect(result.valid).toBe(true)
+    expect(result.insight?.regime).toBe('trend')
+  })
+
+  it('accepts valid regime field (range)', () => {
+    const raw = JSON.stringify({
+      strategies: { 'drift-lending': 0.9 },
+      risk_elevated: false,
+      regime: 'range',
+      reasoning: 'Sideways market.',
+    })
+    const result = validateAIInsight(raw)
+    expect(result.valid).toBe(true)
+    expect(result.insight?.regime).toBe('range')
+  })
+
+  it('accepts valid regime field (stress)', () => {
+    const raw = JSON.stringify({
+      strategies: { 'drift-lending': 0.9 },
+      risk_elevated: true,
+      regime: 'stress',
+      reasoning: 'Liquidation cascade.',
+    })
+    const result = validateAIInsight(raw)
+    expect(result.valid).toBe(true)
+    expect(result.insight?.regime).toBe('stress')
+  })
+
+  it('rejects invalid regime value', () => {
+    const raw = JSON.stringify({
+      strategies: { 'drift-lending': 0.9 },
+      risk_elevated: false,
+      regime: 'bull',
+      reasoning: 'Not a valid regime.',
+    })
+    const result = validateAIInsight(raw)
+    expect(result.valid).toBe(false)
+    expect(result.rejectionReason).toContain('regime')
+  })
+
+  it('accepts missing regime field (optional)', () => {
+    const raw = JSON.stringify({
+      strategies: { 'drift-lending': 0.9 },
+      risk_elevated: false,
+      reasoning: 'No regime specified.',
+    })
+    const result = validateAIInsight(raw)
+    expect(result.valid).toBe(true)
+    expect(result.insight?.regime).toBeUndefined()
+  })
 })
