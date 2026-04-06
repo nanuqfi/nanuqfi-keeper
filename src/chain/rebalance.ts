@@ -10,7 +10,7 @@ import {
 } from '@solana/web3.js'
 import * as anchor from '@coral-xyz/anchor'
 
-export const PROGRAM_ID = new PublicKey('2QtJ5kmxLuW2jYCFpJMtzZ7PCnKdoMwkeueYoDUi5z5P')
+export const PROGRAM_ID = new PublicKey('CDhkMBnc43wJQyVaSrreXk2ojvQvZMWrAWNBLSjaRJxq')
 const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')
 const USDC_MINT = new PublicKey(
   process.env.USDC_MINT ?? 'BiTXT15XyfSakk5Yz8L8QrzHPWbK8NjoZeEMFrDvKdKh',
