@@ -12,6 +12,9 @@ import * as anchor from '@coral-xyz/anchor'
 
 export const PROGRAM_ID = new PublicKey('2QtJ5kmxLuW2jYCFpJMtzZ7PCnKdoMwkeueYoDUi5z5P')
 const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')
+const USDC_MINT = new PublicKey(
+  process.env.USDC_MINT ?? 'BiTXT15XyfSakk5Yz8L8QrzHPWbK8NjoZeEMFrDvKdKh',
+)
 
 // Canonical backend ordering — must match on-chain strategy slot indices
 const DEFAULT_BACKEND_ORDER = [
@@ -174,6 +177,7 @@ export async function submitRebalance(params: RebalanceParams): Promise<Rebalanc
       { pubkey: riskVaultPda, isSigner: false, isWritable: true },
       { pubkey: rebalanceRecordPda, isSigner: false, isWritable: true },
       { pubkey: treasuryPda, isSigner: false, isWritable: true },
+      { pubkey: USDC_MINT, isSigner: false, isWritable: false },
       { pubkey: params.vaultUsdcAddress, isSigner: false, isWritable: true },
       { pubkey: params.treasuryUsdcAddress, isSigner: false, isWritable: true },
       { pubkey: keeper.publicKey, isSigner: true, isWritable: true },
