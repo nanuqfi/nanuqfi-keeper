@@ -107,12 +107,12 @@ describe('Keeper', () => {
     expect(weights['moderate']).toBeDefined()
     expect(weights['aggressive']).toBeDefined()
 
-    // Both vaults have 2 backends (kamino-lending, marginfi-lending)
+    // Both vaults have 3 backends (kamino-lending, marginfi-lending, lulo-lending)
     const moderateKeys = Object.keys(weights['moderate']!)
-    expect(moderateKeys.length).toBe(2)
+    expect(moderateKeys.length).toBe(3)
 
     const aggressiveKeys = Object.keys(weights['aggressive']!)
-    expect(aggressiveKeys.length).toBe(2)
+    expect(aggressiveKeys.length).toBe(3)
   })
 
   it('uses fallback yield data when Kamino API is unreachable', async () => {
@@ -121,9 +121,10 @@ describe('Keeper', () => {
 
     const yieldData = keeper.getYieldData()
     expect(yieldData).not.toBeNull()
-    // Fallback kamino rate + mock marginfi rate
+    // Fallback kamino rate + mock marginfi rate + fallback lulo rate
     expect(yieldData!.kaminoSupplyRate).toBe(0.021)
     expect(yieldData!.marginfiLendingRate).toBe(0.065)
+    expect(yieldData!.luloRegularRate).toBe(0.07)
   })
 
   it('records decisions with timestamps', async () => {
@@ -160,7 +161,7 @@ describe('Keeper', () => {
     expect(scan!.driftComparison).toBeDefined()
   })
 
-  it('both vaults include kamino-lending and marginfi-lending backends', async () => {
+  it('both vaults include kamino-lending, marginfi-lending, and lulo-lending backends', async () => {
     mockFetchForCycle()
     await keeper.runCycle()
 
@@ -169,11 +170,13 @@ describe('Keeper', () => {
     expect(aggressiveDecision).toBeDefined()
     expect(aggressiveDecision!.proposal.scores['kamino-lending']).toBeDefined()
     expect(aggressiveDecision!.proposal.scores['marginfi-lending']).toBeDefined()
+    expect(aggressiveDecision!.proposal.scores['lulo-lending']).toBeDefined()
 
     const moderateDecision = decisions.find(d => d.riskLevel === 'moderate')
     expect(moderateDecision).toBeDefined()
     expect(moderateDecision!.proposal.scores['kamino-lending']).toBeDefined()
     expect(moderateDecision!.proposal.scores['marginfi-lending']).toBeDefined()
+    expect(moderateDecision!.proposal.scores['lulo-lending']).toBeDefined()
   })
 
   it('weights sum to 10000 bps per vault', async () => {

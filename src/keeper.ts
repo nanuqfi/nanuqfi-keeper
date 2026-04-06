@@ -15,6 +15,7 @@ const AI_HISTORY_MAX = 500
 export interface YieldData {
   kaminoSupplyRate: number
   marginfiLendingRate: number
+  luloRegularRate: number
 }
 
 export interface KeeperDecision {
@@ -195,7 +196,7 @@ export class Keeper {
         oracleDeviation: {},
       }
 
-      const strategyNames = ['kamino-lending', 'marginfi-lending']
+      const strategyNames = ['kamino-lending', 'marginfi-lending', 'lulo-lending']
       const prompt = buildInsightPrompt(context, strategyNames)
       const rawResponse = await this.ai.analyze(prompt)
       const result = validateAIInsight(rawResponse)
@@ -337,9 +338,29 @@ export class Keeper {
       // Use fallback rate
     }
 
+    let luloRate = 0.07 // fallback
+    try {
+      const luloApiKey = process.env.LULO_API_KEY
+      if (luloApiKey) {
+        const luloRes = await fetch(
+          'https://api.lulo.fi/v1/rates.getRates',
+          { headers: { 'x-api-key': luloApiKey, 'Content-Type': 'application/json' } }
+        )
+        if (luloRes.ok) {
+          const luloData = await luloRes.json() as { regular?: { CURRENT?: number } }
+          if (luloData.regular?.CURRENT) {
+            luloRate = luloData.regular.CURRENT / 100 // percentage → decimal
+          }
+        }
+      }
+    } catch {
+      // Use fallback rate
+    }
+
     return {
       kaminoSupplyRate: kaminoRate,
       marginfiLendingRate: 0.065, // Mock — Marginfi SDK has broken IDL
+      luloRegularRate: luloRate,
     }
   }
 
@@ -355,6 +376,12 @@ export class Keeper {
         name: 'marginfi-lending',
         apy: data.marginfiLendingRate,
         volatility: 0.04,
+        autoExitContext: { riskLevel: _riskLevel },
+      },
+      {
+        name: 'lulo-lending',
+        apy: data.luloRegularRate,
+        volatility: 0.02,
         autoExitContext: { riskLevel: _riskLevel },
       },
     ]
