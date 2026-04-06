@@ -17,6 +17,7 @@ const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ
 const DEFAULT_BACKEND_ORDER = [
   'kamino-lending',
   'marginfi-lending',
+  'lulo-lending',
 ]
 
 // ─── PDA Derivation ──────────────────────────────────────────────────────

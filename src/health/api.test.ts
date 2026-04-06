@@ -145,12 +145,13 @@ describe('Keeper REST API — enriched endpoints', () => {
         timestamp: 1710500000000,
         riskLevel: 'moderate',
         proposal: { weights: { 'kamino-lending': 6000, 'marginfi-lending': 4000 }, excludedBackends: [], scores: { 'kamino-lending': 0.4, 'marginfi-lending': 0.3 } },
-        yieldData: { kaminoSupplyRate: 0.021, marginfiLendingRate: 0.065 },
+        yieldData: { kaminoSupplyRate: 0.021, marginfiLendingRate: 0.065, luloRegularRate: 0.07 },
       },
     ].slice(0, limit),
     getLatestYieldData: () => ({
       kaminoSupplyRate: 0.021,
       marginfiLendingRate: 0.065,
+      luloRegularRate: 0.07,
     }),
   }
 

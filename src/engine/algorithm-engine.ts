@@ -12,6 +12,7 @@ const SOL_EXPOSED = new Set<string>()
 const BACKEND_RISK_TIER: Record<string, 'low' | 'medium' | 'high'> = {
   'kamino-lending': 'low',
   'marginfi-lending': 'low',
+  'lulo-lending': 'low',
 }
 
 // Max perp allocation per risk level (basis points)
@@ -225,9 +226,9 @@ function computeOpportunityCostMultiplier(backend: BackendConfig, scan: MarketSc
 /** Phase 1C: regime-based multiplier per strategy */
 function getRegimeMultiplier(backendName: string, regime: 'trend' | 'range' | 'stress'): number {
   const REGIME_MULTIPLIERS: Record<string, Record<string, number>> = {
-    trend: { 'kamino-lending': 1.0, 'marginfi-lending': 1.0 },
-    range: { 'kamino-lending': 1.2, 'marginfi-lending': 1.2 },
-    stress: { 'kamino-lending': 1.5, 'marginfi-lending': 1.5 },
+    trend: { 'kamino-lending': 1.0, 'marginfi-lending': 1.0, 'lulo-lending': 1.0 },
+    range: { 'kamino-lending': 1.2, 'marginfi-lending': 1.2, 'lulo-lending': 1.2 },
+    stress: { 'kamino-lending': 1.5, 'marginfi-lending': 1.5, 'lulo-lending': 1.5 },
   }
   return REGIME_MULTIPLIERS[regime]?.[backendName] ?? 1.0
 }
