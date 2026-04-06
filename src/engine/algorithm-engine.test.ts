@@ -565,7 +565,7 @@ describe('Funding slope dampening (no longer applicable with lending-only backen
           name: 'marginfi-lending',
           apy: 0.065,
           volatility: 0.04,
-          autoExitContext: { fundingHistory: decliningHistory },
+          autoExitContext: { riskLevel: 'moderate' },
         },
       ],
       currentWeights: {},
