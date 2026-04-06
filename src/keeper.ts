@@ -1,12 +1,10 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import type { KeeperConfig } from './config.js'
 import { HealthMonitor } from './health/monitor.js'
-import { initDriftClient, checkDriftHealth, DriftDataCache } from './drift/index.js'
 import { AlgorithmEngine, type BackendConfig, type VaultState, type WeightProposal, type ProposalContext } from './engine/index.js'
 import { scanDeFiYields, type MarketScan } from './scanner/index.js'
 import { createAlerter, type Alerter } from './alerts/index.js'
 import { submitRebalance, riskLevelToIndex, type RebalanceResult } from './chain/index.js'
-import type { DriftClient } from '@drift-labs/sdk'
 import { AIProvider, buildInsightPrompt, validateAIInsight, type AIInsight, type MarketContext } from './ai/index.js'
 
 const AI_HISTORY_PATH = process.env.AI_HISTORY_PATH ?? '/data/ai-history.json'
@@ -30,8 +28,6 @@ export interface KeeperDecision {
 export interface KeeperDeps {
   config: KeeperConfig
   monitor: HealthMonitor
-  driftClient?: DriftClient
-  dataCache?: DriftDataCache
   ai?: AIProvider
 }
 
@@ -40,8 +36,6 @@ export class Keeper {
   private readonly monitor: HealthMonitor
   private readonly engine: AlgorithmEngine
   private readonly alerter: Alerter
-  private driftClient?: DriftClient
-  private dataCache?: DriftDataCache
   private ai: AIProvider | null
   private running = false
   private cycleTimer: ReturnType<typeof setTimeout> | null = null
@@ -57,8 +51,6 @@ export class Keeper {
   constructor(deps: KeeperDeps) {
     this.config = deps.config
     this.monitor = deps.monitor
-    this.driftClient = deps.driftClient
-    this.dataCache = deps.dataCache
     this.ai = deps.ai ?? null
     this.engine = new AlgorithmEngine()
     this.alerter = createAlerter(deps.config)
@@ -67,14 +59,8 @@ export class Keeper {
   async boot(): Promise<void> {
     this.loadAIHistory()
 
-    // 1. Verify RPC connectivity
+    // Verify RPC connectivity
     await this.checkRpc()
-
-    // 2. Initialize Drift SDK if config present and not already injected
-    if (this.config.drift?.rpcUrl && !this.driftClient) {
-      this.driftClient = await initDriftClient(this.config.drift)
-      this.dataCache = new DriftDataCache()
-    }
   }
 
   async start(): Promise<void> {
@@ -228,27 +214,21 @@ export class Keeper {
     const timeout = setTimeout(() => controller.abort(), cycleTimeout)
 
     try {
-      // 1. Check Drift subscription health
-      if (this.driftClient && !checkDriftHealth(this.driftClient)) {
-        this.monitor.recordCycleFailure('Drift subscription unhealthy')
-        return
-      }
-
-      // 2. Fetch real yield data (or use defaults if no Drift connection)
+      // 1. Fetch real yield data
       const yieldData = await this.fetchYieldData()
       this.latestYieldData = yieldData
 
-      // 3. Scan DeFi yields BEFORE proposing — feeds opportunity cost into scoring
+      // 2. Scan DeFi yields BEFORE proposing — feeds opportunity cost into scoring
       const marketScan = await scanDeFiYields()
       this.latestMarketScan = marketScan
 
-      // 4. Build proposal context with market scan + oracle data
+      // 3. Build proposal context with market scan + oracle data
       const proposalCtx: ProposalContext = {
         marketScan,
         oracleDeviation: this.cachedInsight ? {} : undefined,
       }
 
-      // 5. Run algorithm engine for each vault (moderate + aggressive)
+      // 4. Run algorithm engine for each vault (moderate + aggressive)
       const vaults = ['moderate', 'aggressive'] as const
       for (const riskLevel of vaults) {
         const backends = this.buildBackendConfigs(yieldData, riskLevel)

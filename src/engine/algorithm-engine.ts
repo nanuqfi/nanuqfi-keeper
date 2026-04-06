@@ -108,8 +108,6 @@ export class AlgorithmEngine {
         }
       }
 
-      // Funding slope dampening (Phase 2B) — no longer applicable with lending-only backends
-
       scores[backend.name] = score
 
       if (exitResult.shouldExit) {
@@ -215,9 +213,6 @@ function computeOpportunityCostMultiplier(backend: BackendConfig, scan: MarketSc
   const bestExternal = scan.bestByRisk[tier]
   if (!bestExternal) return 1.0
 
-  // Only penalize if external protocol is different from Drift
-  if (bestExternal.protocol === 'Drift') return 1.0
-
   const ratio = bestExternal.apy / Math.max(backend.apy, 0.0001)
   if (ratio > 2) return 0.7
   return 1.0
@@ -233,37 +228,3 @@ function getRegimeMultiplier(backendName: string, regime: 'trend' | 'range' | 's
   return REGIME_MULTIPLIERS[regime]?.[backendName] ?? 1.0
 }
 
-/**
- * Phase 2B: dampen drift-basis when funding rate is trending toward zero.
- * Computes linear regression slope over last 8 periods. If slope is strongly
- * negative AND latest funding < 2bps, apply 0.5x dampening.
- */
-function computeFundingSlopeDampening(history: number[]): number {
-  if (history.length < 8) return 1.0
-
-  const window = history.slice(-8)
-  const n = window.length
-
-  // Linear regression slope: Σ((x - x̄)(y - ȳ)) / Σ((x - x̄)²)
-  const xMean = (n - 1) / 2
-  const yMean = window.reduce((s, v) => s + v, 0) / n
-
-  let numerator = 0
-  let denominator = 0
-  for (let i = 0; i < n; i++) {
-    const dx = i - xMean
-    numerator += dx * (window[i]! - yMean)
-    denominator += dx * dx
-  }
-
-  if (denominator === 0) return 1.0
-  const slope = numerator / denominator
-
-  const latestFunding = window[n - 1]!
-  // Yellow light: slope strongly negative AND latest funding near zero (<2bps)
-  if (slope < -0.00002 && latestFunding < 0.0002) {
-    return 0.5
-  }
-
-  return 1.0
-}
