@@ -2,6 +2,7 @@ import { createServer, IncomingMessage, ServerResponse } from 'node:http'
 import type { HealthMonitor } from './monitor.js'
 import type { MarketScan } from '../scanner/index.js'
 import type { KeeperDecision, YieldData } from '../keeper.js'
+import type { BacktestResult } from '../backtest/index.js'
 
 export interface VaultSnapshot {
   riskLevel: string
@@ -34,6 +35,7 @@ export interface KeeperDataSource {
   getLatestYieldData?(): YieldData | null
   getAIInsight?(): import('../ai/index.js').AIInsight | null
   getAIHistory?(limit?: number): import('../ai/index.js').AIInsight[]
+  getBacktestResult?(): Promise<BacktestResult | null>
 }
 
 export function createApi(
@@ -103,6 +105,22 @@ export function createApi(
         const limit = Math.min(Number(url.searchParams.get('limit') ?? 20), 100)
         const history = data.getAIHistory?.(limit) ?? []
         respond(res, 200, history)
+      } else if (path === '/v1/backtest') {
+        const backtestPromise = data.getBacktestResult
+          ? data.getBacktestResult()
+          : Promise.resolve(null)
+        backtestPromise
+          .then(result => {
+            if (result) {
+              respond(res, 200, result)
+            } else {
+              respond(res, 503, { error: 'Backtest not available' })
+            }
+          })
+          .catch(() => {
+            respond(res, 500, { error: 'Backtest computation failed' })
+          })
+        return
       } else {
         respond(res, 404, { error: 'Not found' })
       }

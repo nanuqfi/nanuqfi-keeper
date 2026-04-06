@@ -153,6 +153,24 @@ describe('Keeper REST API — enriched endpoints', () => {
       marginfiLendingRate: 0.065,
       luloRegularRate: 0.07,
     }),
+    getBacktestResult: async () => ({
+      totalReturn: 0.15,
+      cagr: 0.065,
+      maxDrawdown: 0.002,
+      sharpeRatio: 8.5,
+      sortinoRatio: 12.0,
+      volatility: 0.003,
+      protocols: {
+        'kamino-lending': { totalReturn: 0.10, cagr: 0.05, maxDrawdown: 0.001, sharpeRatio: 7.0 },
+        'marginfi-lending': { totalReturn: 0.12, cagr: 0.06, maxDrawdown: 0.001, sharpeRatio: 8.0 },
+        'lulo-lending': { totalReturn: 0.14, cagr: 0.065, maxDrawdown: 0.002, sharpeRatio: 8.5 },
+      },
+      series: [],
+      startDate: '2023-10-12',
+      endDate: '2026-04-06',
+      dataPoints: 21000,
+      riskFreeRate: 0.04,
+    }),
   }
 
   const api = createApi(monitor, enrichedData, 0)
@@ -214,5 +232,14 @@ describe('Keeper REST API — enriched endpoints', () => {
     const live = yields.live as Record<string, unknown>
     expect(live).toHaveProperty('kaminoSupplyRate', 0.021)
     expect(live).toHaveProperty('marginfiLendingRate', 0.065)
+  })
+
+  it('GET /v1/backtest returns simulation results', async () => {
+    const { status, body } = await get('/v1/backtest')
+    expect(status).toBe(200)
+    const result = body as { totalReturn: number; sharpeRatio: number; protocols: Record<string, unknown> }
+    expect(result.totalReturn).toBe(0.15)
+    expect(result.sharpeRatio).toBe(8.5)
+    expect(result.protocols['kamino-lending']).toBeDefined()
   })
 })

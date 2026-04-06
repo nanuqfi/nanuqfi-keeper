@@ -6,6 +6,8 @@ import { scanDeFiYields, type MarketScan } from './scanner/index.js'
 import { createAlerter, type Alerter } from './alerts/index.js'
 import { submitRebalance, riskLevelToIndex, type RebalanceResult } from './chain/index.js'
 import { AIProvider, buildInsightPrompt, validateAIInsight, type AIInsight, type MarketContext } from './ai/index.js'
+import { runBacktest, fetchHistoricalData, DEFAULT_CONFIG } from './backtest/index.js'
+import type { BacktestResult } from './backtest/index.js'
 
 const AI_HISTORY_PATH = process.env.AI_HISTORY_PATH ?? '/data/ai-history.json'
 const AI_HISTORY_MAX = 500
@@ -47,6 +49,8 @@ export class Keeper {
   private latestYieldData: YieldData | null = null
   private cachedInsight: AIInsight | null = null
   private aiHistory: AIInsight[] = []
+  private backtestCache: BacktestResult | null = null
+  private backtestCacheTime = 0
 
   constructor(deps: KeeperDeps) {
     this.config = deps.config
@@ -118,6 +122,23 @@ export class Keeper {
   /** Access AI insight history, most recent first. */
   getAIHistory(limit = 20): AIInsight[] {
     return this.aiHistory.slice(-limit).reverse()
+  }
+
+  /** Fetch historical simulation results, cached for 1 hour. */
+  async getBacktestResult(): Promise<BacktestResult | null> {
+    const CACHE_TTL = 3_600_000 // 1 hour
+    if (this.backtestCache && Date.now() - this.backtestCacheTime < CACHE_TTL) {
+      return this.backtestCache
+    }
+    try {
+      const data = await fetchHistoricalData(DEFAULT_CONFIG)
+      this.backtestCache = runBacktest(data, DEFAULT_CONFIG)
+      this.backtestCacheTime = Date.now()
+      return this.backtestCache
+    } catch {
+      // Return stale cache on error rather than failing hard
+      return this.backtestCache
+    }
   }
 
   private loadAIHistory(): void {
