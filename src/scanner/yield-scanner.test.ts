@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { scanDeFiYields, fetchDeFiLlamaYields, fetchDriftYields } from './yield-scanner'
+import { scanDeFiYields, fetchDeFiLlamaYields } from './yield-scanner'
 import type { MarketScan, YieldOpportunity } from './yield-scanner'
 
 // ---------------------------------------------------------------------------
@@ -21,16 +21,6 @@ function makeLlamaPool(overrides: Record<string, unknown> = {}) {
 
 function makeLlamaResponse(pools: ReturnType<typeof makeLlamaPool>[]) {
   return { status: 'success', data: pools }
-}
-
-function makeDriftRateResponse(rate: string) {
-  return { rates: [{ ts: Date.now(), rate }] }
-}
-
-function makeDriftFundingResponse(fundingRate: string, oraclePriceTwap: string) {
-  return {
-    fundingRates: [{ fundingRate, oraclePriceTwap }],
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -64,18 +54,6 @@ describe('scanDeFiYields', () => {
           ]),
         })
       }
-      if (url.includes('rateHistory')) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => makeDriftRateResponse('0.065'),
-        })
-      }
-      if (url.includes('fundingRates')) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => makeDriftFundingResponse('150000000', '150000000'),
-        })
-      }
       return Promise.reject(new Error('unexpected URL'))
     })
 
@@ -92,7 +70,7 @@ describe('scanDeFiYields', () => {
     // bestByRisk populated
     expect(scan.bestByRisk.low).not.toBeNull()
 
-    // driftComparison populated
+    // driftComparison shape present for API compatibility
     expect(scan.driftComparison.totalScanned).toBeGreaterThan(0)
   })
 
@@ -108,7 +86,6 @@ describe('scanDeFiYields', () => {
           ]),
         })
       }
-      // Drift APIs down
       return Promise.reject(new Error('offline'))
     })
 
@@ -120,64 +97,16 @@ describe('scanDeFiYields', () => {
     expect(scan.bestByRisk.medium?.protocol).toBe('c')
   })
 
-  it('driftComparison ranks Drift correctly among all opportunities', async () => {
-    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
-      if (url.includes('llama.fi')) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => makeLlamaResponse([
-            makeLlamaPool({ project: 'kamino', apy: 12.0 }),
-          ]),
-        })
-      }
-      if (url.includes('rateHistory')) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => makeDriftRateResponse('0.08'),
-        })
-      }
-      if (url.includes('fundingRates')) {
-        return Promise.resolve({
-          ok: false,
-          json: async () => ({}),
-        })
-      }
-      return Promise.reject(new Error('unexpected'))
-    })
-
-    const scan = await scanDeFiYields()
-
-    // kamino at 12% > Drift at 8%
-    expect(scan.driftComparison.driftBestApy).toBe(0.08)
-    expect(scan.driftComparison.marketBestApy).toBe(0.12)
-    expect(scan.driftComparison.driftRank).toBe(2)
-  })
-
   it('handles DeFi Llama API failure gracefully', async () => {
-    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
-      if (url.includes('llama.fi')) {
-        return Promise.reject(new Error('network error'))
-      }
-      if (url.includes('rateHistory')) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => makeDriftRateResponse('0.05'),
-        })
-      }
-      if (url.includes('fundingRates')) {
-        return Promise.resolve({
-          ok: false,
-          json: async () => ({}),
-        })
-      }
-      return Promise.reject(new Error('unexpected'))
-    })
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error('network error'))
 
     const scan = await scanDeFiYields()
 
-    // Should still have Drift results
-    expect(scan.opportunities.length).toBeGreaterThanOrEqual(1)
-    expect(scan.opportunities[0]!.protocol).toBe('Drift')
+    expect(scan.opportunities).toHaveLength(0)
+    expect(scan.bestByRisk.low).toBeNull()
+    expect(scan.driftComparison.driftBestApy).toBe(0)
+    expect(scan.driftComparison.marketBestApy).toBe(0)
+    expect(scan.driftComparison.totalScanned).toBe(0)
   })
 
   it('handles all APIs failing without crashing', async () => {
@@ -192,8 +121,6 @@ describe('scanDeFiYields', () => {
     expect(scan.driftComparison.driftBestApy).toBe(0)
     expect(scan.driftComparison.marketBestApy).toBe(0)
     expect(scan.driftComparison.totalScanned).toBe(0)
-    // driftRank = totalScanned + 1 when no Drift found
-    expect(scan.driftComparison.driftRank).toBe(1)
   })
 })
 
@@ -258,89 +185,5 @@ describe('fetchDeFiLlamaYields', () => {
     })
 
     await expect(fetchDeFiLlamaYields()).rejects.toThrow('DeFi Llama error: 500')
-  })
-})
-
-// ---------------------------------------------------------------------------
-// fetchDriftYields
-// ---------------------------------------------------------------------------
-
-describe('fetchDriftYields', () => {
-  it('returns USDC lending and basis trade opportunities', async () => {
-    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
-      if (url.includes('rateHistory')) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => makeDriftRateResponse('0.065'),
-        })
-      }
-      if (url.includes('fundingRates')) {
-        // fundingRate = 150_000_000 (0.15 in 1e9), oraclePriceTwap = 150_000_000 (150 in 1e6)
-        return Promise.resolve({
-          ok: true,
-          json: async () => makeDriftFundingResponse('150000000', '150000000'),
-        })
-      }
-      return Promise.reject(new Error('unexpected'))
-    })
-
-    const results = await fetchDriftYields()
-
-    const lending = results.find(o => o.strategy === 'USDC Lending')
-    expect(lending).toBeDefined()
-    expect(lending!.apy).toBe(0.065)
-    expect(lending!.risk).toBe('low')
-    expect(lending!.protocol).toBe('Drift')
-
-    const basis = results.find(o => o.strategy === 'SOL-PERP Basis Trade')
-    expect(basis).toBeDefined()
-    expect(basis!.apy).toBeGreaterThan(0)
-    expect(basis!.risk).toBe('medium')
-  })
-
-  it('skips lending if rate is zero or NaN', async () => {
-    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
-      if (url.includes('rateHistory')) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => makeDriftRateResponse('0'),
-        })
-      }
-      if (url.includes('fundingRates')) {
-        return Promise.resolve({ ok: false })
-      }
-      return Promise.reject(new Error('unexpected'))
-    })
-
-    const results = await fetchDriftYields()
-    const lending = results.find(o => o.strategy === 'USDC Lending')
-    expect(lending).toBeUndefined()
-  })
-
-  it('skips basis trade if funding rate implies negative APR', async () => {
-    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
-      if (url.includes('rateHistory')) {
-        return Promise.resolve({ ok: false })
-      }
-      if (url.includes('fundingRates')) {
-        // Negative funding rate → negative APR → skip
-        return Promise.resolve({
-          ok: true,
-          json: async () => makeDriftFundingResponse('-150000000', '150000000'),
-        })
-      }
-      return Promise.reject(new Error('unexpected'))
-    })
-
-    const results = await fetchDriftYields()
-    const basis = results.find(o => o.strategy === 'SOL-PERP Basis Trade')
-    expect(basis).toBeUndefined()
-  })
-
-  it('returns empty array when all Drift APIs fail', async () => {
-    globalThis.fetch = vi.fn().mockRejectedValue(new Error('offline'))
-
-    const results = await fetchDriftYields()
-    expect(results).toHaveLength(0)
   })
 })

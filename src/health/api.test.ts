@@ -130,7 +130,7 @@ describe('Keeper REST API — enriched endpoints', () => {
     getMarketScan: () => ({
       timestamp: 1710500000000,
       opportunities: [
-        { protocol: 'Drift', strategy: 'USDC Lending', asset: 'USDC', apy: 0.065, tvl: 0, risk: 'low' as const, source: 'drift' },
+        { protocol: 'kamino', strategy: 'USDC', asset: 'USDC', apy: 0.065, tvl: 500_000, risk: 'low' as const, source: 'defillama' },
         { protocol: 'marginfi', strategy: 'USDC', asset: 'USDC', apy: 0.08, tvl: 500_000, risk: 'low' as const, source: 'defillama' },
       ],
       bestByRisk: {
@@ -138,7 +138,7 @@ describe('Keeper REST API — enriched endpoints', () => {
         medium: null,
         high: null,
       },
-      driftComparison: { driftBestApy: 0.065, marketBestApy: 0.08, driftRank: 2, totalScanned: 2 },
+      driftComparison: { driftBestApy: 0, marketBestApy: 0.08, driftRank: 3, totalScanned: 2 },
     }),
     getKeeperDecisions: (limit = 20) => [
       {
@@ -185,7 +185,7 @@ describe('Keeper REST API — enriched endpoints', () => {
     expect(status).toBe(200)
     const scan = body as { opportunities: unknown[]; driftComparison: { driftRank: number } }
     expect(scan.opportunities).toHaveLength(2)
-    expect(scan.driftComparison.driftRank).toBe(2)
+    expect(scan.driftComparison.driftRank).toBe(3)
   })
 
   it('GET /v1/decisions returns keeper decisions', async () => {

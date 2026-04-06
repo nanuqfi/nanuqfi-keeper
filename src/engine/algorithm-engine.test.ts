@@ -117,28 +117,15 @@ describe('AlgorithmEngine.propose — auto-exit exclusion', () => {
     expect(sumWeights(proposal.weights)).toBe(10_000)
   })
 
-  it('returns empty weights when all backends are excluded (via legacy auto-exit triggers)', () => {
-    // Use Drift-era backends that still trigger auto-exit in checkAutoExit
+  it('returns empty weights when there are no backends', () => {
+    // Empty backends list — no allocation possible
     const state: VaultState = {
       riskLevel: 'moderate',
-      backends: [
-        {
-          name: 'drift-basis',
-          apy: 0.20,
-          volatility: 0.05,
-          autoExitContext: { fundingHistory: Array(16).fill(-0.001) },
-        },
-        {
-          name: 'drift-insurance',
-          apy: 0.08,
-          volatility: 0.02,
-          autoExitContext: { insuranceFundDrawdown: 0.40 },
-        },
-      ],
+      backends: [],
       currentWeights: {},
     }
     const proposal = engine.propose(state)
-    expect(proposal.excludedBackends).toHaveLength(2)
+    expect(proposal.excludedBackends).toHaveLength(0)
     expect(Object.keys(proposal.weights)).toHaveLength(0)
     expect(sumWeights(proposal.weights)).toBe(0)
   })
@@ -398,14 +385,14 @@ function makeMarketScan(overrides: Partial<MarketScan> = {}): MarketScan {
     opportunities: [
       makeOpp('Kamino', 0.08, 'low'),
       makeOpp('Marginfi', 0.12, 'medium'),
-      makeOpp('Drift', 0.02, 'low'),
+      makeOpp('Lulo', 0.05, 'low'),
     ],
     bestByRisk: {
       low: makeOpp('Kamino', 0.08, 'low'),
       medium: makeOpp('Marginfi', 0.12, 'medium'),
       high: null,
     },
-    driftComparison: { driftBestApy: 0.02, marketBestApy: 0.12, driftRank: 3, totalScanned: 3 },
+    driftComparison: { driftBestApy: 0, marketBestApy: 0.12, driftRank: 4, totalScanned: 3 },
     ...overrides,
   }
 }

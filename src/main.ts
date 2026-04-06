@@ -54,7 +54,6 @@ const api = createApi(monitor, dataSource, port)
 async function main() {
   console.log(`[NanuqFi Keeper] Starting on port ${port}...`)
   console.log(`[NanuqFi Keeper] Cycle interval: ${config.cycleIntervalMs / 1000}s`)
-  console.log(`[NanuqFi Keeper] Drift env: ${config.drift?.env ?? 'none'}`)
   console.log(`[NanuqFi Keeper] AI layer: ${ai ? 'enabled' : 'disabled (no API key)'}`)
   if (ai) {
     console.log(`[NanuqFi Keeper] AI cycle interval: ${config.aiCycleIntervalMs / 1000}s`)

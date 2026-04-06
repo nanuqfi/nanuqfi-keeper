@@ -27,20 +27,6 @@ function mockFetchForCycle() {
         json: async () => ({ status: 'success', data: [] }),
       })
     }
-    // Drift rate history
-    if (typeof url === 'string' && url.includes('rateHistory')) {
-      return Promise.resolve({
-        ok: true,
-        json: async () => ({ rates: [] }),
-      })
-    }
-    // Drift funding rates
-    if (typeof url === 'string' && url.includes('fundingRates')) {
-      return Promise.resolve({
-        ok: true,
-        json: async () => ({ fundingRates: [] }),
-      })
-    }
     // Default — empty OK
     return Promise.resolve({ ok: true, json: async () => ({}) })
   })
@@ -205,18 +191,6 @@ describe('AI cycle', () => {
         return Promise.resolve({
           ok: true,
           json: async () => ({ status: 'success', data: [] }),
-        })
-      }
-      if (typeof url === 'string' && url.includes('rateHistory')) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({ rates: [] }),
-        })
-      }
-      if (typeof url === 'string' && url.includes('fundingRates')) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({ fundingRates: [] }),
         })
       }
       return Promise.resolve({ ok: true, json: async () => ({}) })
