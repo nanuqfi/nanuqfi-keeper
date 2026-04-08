@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="120" viewBox="0 0 800 120">
+  <rect width="800" height="120" fill="#080B11" rx="12"/>
+
+  <!-- Title -->
+  <text x="400" y="25" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#64748B" text-anchor="middle" letter-spacing="3">CI/CD PIPELINE</text>
+
+  <!-- Box 1: GitHub -->
+  <rect x="30" y="42" width="130" height="46" rx="8" fill="#FFFFFF" fill-opacity="0.04" stroke="#334155" stroke-width="1"/>
+  <text x="95" y="62" font-family="system-ui, sans-serif" font-size="12" font-weight="600" fill="#E2E8F0" text-anchor="middle">Push to main</text>
+  <text x="95" y="78" font-family="ui-monospace, monospace" font-size="9" fill="#64748B" text-anchor="middle">GitHub</text>
+
+  <!-- Arrow -->
+  <line x1="165" y1="65" x2="195" y2="65" stroke="#334155" stroke-width="2"/>
+  <polygon points="195,60 205,65 195,70" fill="#334155"/>
+
+  <!-- Box 2: CI -->
+  <rect x="210" y="42" width="130" height="46" rx="8" fill="#0EA5E9" fill-opacity="0.06" stroke="#0EA5E9" stroke-opacity="0.3" stroke-width="1"/>
+  <text x="275" y="62" font-family="system-ui, sans-serif" font-size="12" font-weight="600" fill="#0EA5E9" text-anchor="middle">Build + Test</text>
+  <text x="275" y="78" font-family="ui-monospace, monospace" font-size="9" fill="#64748B" text-anchor="middle">GitHub Actions</text>
+
+  <!-- Arrow -->
+  <line x1="345" y1="65" x2="375" y2="65" stroke="#334155" stroke-width="2"/>
+  <polygon points="375,60 385,65 375,70" fill="#334155"/>
+
+  <!-- Box 3: GHCR -->
+  <rect x="390" y="42" width="130" height="46" rx="8" fill="#10B981" fill-opacity="0.06" stroke="#10B981" stroke-opacity="0.3" stroke-width="1"/>
+  <text x="455" y="62" font-family="system-ui, sans-serif" font-size="12" font-weight="600" fill="#10B981" text-anchor="middle">Push Image</text>
+  <text x="455" y="78" font-family="ui-monospace, monospace" font-size="9" fill="#64748B" text-anchor="middle">GHCR</text>
+
+  <!-- Arrow -->
+  <line x1="525" y1="65" x2="555" y2="65" stroke="#334155" stroke-width="2"/>
+  <polygon points="555,60 565,65 555,70" fill="#334155"/>
+
+  <!-- Box 4: VPS -->
+  <rect x="570" y="42" width="200" height="46" rx="8" fill="#F59E0B" fill-opacity="0.06" stroke="#F59E0B" stroke-opacity="0.3" stroke-width="1"/>
+  <text x="670" y="62" font-family="system-ui, sans-serif" font-size="12" font-weight="600" fill="#F59E0B" text-anchor="middle">Auto Deploy</text>
+  <text x="670" y="78" font-family="ui-monospace, monospace" font-size="9" fill="#64748B" text-anchor="middle">keeper.nanuqfi.com</text>
+
+  <!-- Footer -->
+  <text x="400" y="110" font-family="ui-monospace, monospace" font-size="10" fill="#334155" text-anchor="middle">docker compose pull + up -d</text>
+</svg>

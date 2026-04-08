@@ -15,17 +15,9 @@
 
 The keeper operates a multi-layer decision pipeline where each layer narrows the action space before capital moves on-chain:
 
-```
-Market Scan          Algorithm Engine         AI Assessment          On-Chain
------------          ----------------         -------------          --------
-DeFi Llama     -->   Risk-adjusted      -->   Regime detection -->   Rebalance TX
-Kamino API           scoring (APY/vol)        Sustainability         to allocator
-Marginfi SDK         Opportunity cost         Confidence scoring     program
-Lulo API             Concentration cap        Risk flag              (PDA + weights
-                     Oracle dampening                                + reasoning hash)
-```
-
-**Trust model:** AI is advisory only. It proposes, the algorithm validates, the on-chain program enforces. AI cannot execute transactions, override vetoes, or bypass guardrails.
+<div align="center">
+<img src="assets/pipeline.svg" alt="NanuqFi Keeper Decision Pipeline" width="800"/>
+</div>
 
 ## How It Works
 
@@ -166,18 +158,9 @@ pnpm test:watch      # watch mode
 
 The keeper runs as a Docker container on VPS, accessible at `keeper.nanuqfi.com`.
 
-```
-GitHub push to main
-       |
-       v
-GitHub Actions CI --> Build + Test --> Push to GHCR
-       |
-       v
-VPS auto-deploy --> docker compose pull + up -d
-       |
-       v
-keeper.nanuqfi.com (port 9000 -> 3000)
-```
+<div align="center">
+<img src="assets/deploy.svg" alt="NanuqFi Keeper CI/CD Pipeline" width="800"/>
+</div>
 
 - **Image:** `ghcr.io/nanuqfi/nanuqfi-keeper:latest`
 - **Runtime:** Node.js 22 (slim)
