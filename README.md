@@ -1,17 +1,6 @@
 <div align="center">
 
-<pre>
-███╗   ██╗ █████╗ ███╗   ██╗██╗   ██╗ ██████╗ ███████╗██╗    ██╗  ██╗███████╗███████╗██████╗ ███████╗██████╗
-████╗  ██║██╔══██╗████╗  ██║██║   ██║██╔═══██╗██╔════╝██║    ██║ ██╔╝██╔════╝██╔════╝██╔══██╗██╔════╝██╔══██╗
-██╔██╗ ██║███████║██╔██╗ ██║██║   ██║██║   ██║█████╗  ██║    █████╔╝ █████╗  █████╗  ██████╔╝█████╗  ██████╔╝
-██║╚██╗██║██╔══██║██║╚██╗██║██║   ██║██║▄▄ ██║██╔══╝  ██║    ██╔═██╗ ██╔══╝  ██╔══╝  ██╔═══╝ ██╔══╝  ██╔══██╗
-██║ ╚████║██║  ██║██║ ╚████║╚██████╔╝╚██████╔╝██║     ██║    ██║  ██╗███████╗███████╗██║     ███████╗██║  ██║
-╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝  ╚═══╝ ╚═════╝  ╚══▀▀═╝ ╚═╝     ╚═╝    ╚═╝  ╚═╝╚══════╝╚══════╝╚═╝     ╚══════╝╚═╝  ╚═╝
-</pre>
-
-**AI-Powered Yield Strategy Engine**
-
-Algorithm scoring + Claude AI reasoning + on-chain enforcement. Every decision explained.
+<img src="assets/header.svg" alt="NanuqFi Keeper — AI-Powered Yield Strategy Engine" width="800"/>
 
 [![Tests](https://img.shields.io/badge/tests-206%20passing-brightgreen)]()
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)]()
