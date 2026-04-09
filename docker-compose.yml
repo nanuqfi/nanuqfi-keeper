@@ -11,13 +11,20 @@ services:
       - .env
     volumes:
       - /home/nanuqfi/secrets/keeper-wallet.json:/run/secrets/keeper-wallet:ro
+      - keeper-data:/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 60s
       timeout: 10s
       retries: 3
+    environment:
+      - AI_HISTORY_PATH=/data/ai-history.json
+      - DECISION_HISTORY_PATH=/data/decision-history.json
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
+
+volumes:
+  keeper-data:

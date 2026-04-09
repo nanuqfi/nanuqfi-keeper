@@ -11,6 +11,7 @@ import type { BacktestResult } from './backtest/index.js'
 
 const AI_HISTORY_PATH = process.env.AI_HISTORY_PATH ?? '/data/ai-history.json'
 const AI_HISTORY_MAX = 500
+const DECISION_HISTORY_PATH = process.env.DECISION_HISTORY_PATH ?? '/data/decision-history.json'
 
 export interface YieldData {
   kaminoSupplyRate: number
@@ -62,6 +63,7 @@ export class Keeper {
 
   async boot(): Promise<void> {
     this.loadAIHistory()
+    this.loadDecisionHistory()
 
     // Verify RPC connectivity
     await this.checkRpc()
@@ -160,6 +162,29 @@ export class Keeper {
       writeFileSync(AI_HISTORY_PATH, JSON.stringify(this.aiHistory))
     } catch (err) {
       console.error('[AI] Failed to persist history:', err instanceof Error ? err.message : err)
+    }
+  }
+
+  private loadDecisionHistory(): void {
+    try {
+      const raw = readFileSync(DECISION_HISTORY_PATH, 'utf-8')
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) {
+        this.decisions = parsed.slice(-this.maxDecisionHistory)
+        console.log(`[Keeper] Loaded ${this.decisions.length} decisions from disk`)
+      }
+    } catch {
+      this.decisions = []
+    }
+  }
+
+  private saveDecisionHistory(): void {
+    try {
+      const dir = DECISION_HISTORY_PATH.substring(0, DECISION_HISTORY_PATH.lastIndexOf('/'))
+      if (dir) mkdirSync(dir, { recursive: true })
+      writeFileSync(DECISION_HISTORY_PATH, JSON.stringify(this.decisions))
+    } catch (err) {
+      console.error('[Keeper] Failed to persist decisions:', err instanceof Error ? err.message : err)
     }
   }
 
@@ -277,6 +302,8 @@ export class Keeper {
         if (this.decisions.length > this.maxDecisionHistory) {
           this.decisions = this.decisions.slice(-this.maxDecisionHistory)
         }
+
+        this.saveDecisionHistory()
 
         // Submit rebalance tx to on-chain allocator (if keypair configured)
         if (this.config.keeperKeypairPath && this.config.rpcUrls[0]) {
