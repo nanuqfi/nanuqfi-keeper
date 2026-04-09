@@ -20,6 +20,7 @@ services:
     environment:
       - AI_HISTORY_PATH=/data/ai-history.json
       - DECISION_HISTORY_PATH=/data/decision-history.json
+      - HEALTH_STATS_PATH=/data/health-stats.json
     logging:
       driver: json-file
       options:

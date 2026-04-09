@@ -64,9 +64,27 @@ export class Keeper {
   async boot(): Promise<void> {
     this.loadAIHistory()
     this.loadDecisionHistory()
+    this.restoreCurrentWeights()
 
     // Verify RPC connectivity
     await this.checkRpc()
+  }
+
+  private restoreCurrentWeights(): void {
+    // Rebuild currentWeights from the most recent decision per vault
+    // so the first cycle has proper "previous weights" context
+    for (const riskLevel of ['moderate', 'aggressive']) {
+      const latest = [...this.decisions]
+        .reverse()
+        .find(d => d.riskLevel === riskLevel)
+      if (latest?.proposal?.weights) {
+        this.currentWeights[riskLevel] = latest.proposal.weights
+      }
+    }
+    const restored = Object.keys(this.currentWeights).length
+    if (restored > 0) {
+      console.log(`[Keeper] Restored weights for ${restored} vault(s) from decision history`)
+    }
   }
 
   async start(): Promise<void> {
