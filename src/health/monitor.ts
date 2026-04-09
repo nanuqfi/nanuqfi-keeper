@@ -19,7 +19,7 @@ export class HealthMonitor {
 
   getStatus(): HealthStatus {
     return {
-      uptime: Date.now() - this.startTime,
+      uptime: Math.floor((Date.now() - this.startTime) / 1000),
       lastCycleTimestamp: this._lastCycleTimestamp,
       cyclesCompleted: this._cyclesCompleted,
       cyclesFailed: this._cyclesFailed,
