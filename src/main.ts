@@ -72,11 +72,33 @@ async function main() {
   }
 }
 
-process.on('SIGTERM', async () => {
-  console.log('[NanuqFi Keeper] Shutting down...')
+let isShuttingDown = false
+
+async function shutdown(signal: string): Promise<void> {
+  if (isShuttingDown) return
+  isShuttingDown = true
+  console.log(`[NanuqFi Keeper] Received ${signal}, shutting down gracefully...`)
+
+  // Stop the cycle loop — prevents new cycles from starting
   keeper.stop()
-  await api.stop()
-  process.exit(0)
-})
+
+  // Close the HTTP server — stops accepting new connections
+  try {
+    await api.stop()
+  } catch (err) {
+    console.warn('[NanuqFi Keeper] API server close error:', err)
+  }
+
+  // Allow pending operations up to 5s, then force exit
+  const forceExit = setTimeout(() => {
+    console.log('[NanuqFi Keeper] Force exit after grace period')
+    process.exit(0)
+  }, 5_000)
+  // Don't let this timer keep the process alive — let it exit naturally if clean
+  forceExit.unref()
+}
+
+process.on('SIGINT', () => { void shutdown('SIGINT') })
+process.on('SIGTERM', () => { void shutdown('SIGTERM') })
 
 main()
