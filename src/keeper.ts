@@ -9,6 +9,7 @@ import { fetchRebalanceChainState } from './chain/state.js'
 import { AIProvider, buildInsightPrompt, validateAIInsight, type AIInsight, type MarketContext } from './ai/index.js'
 import { runBacktest, fetchHistoricalData, DEFAULT_CONFIG } from './backtest/index.js'
 import type { BacktestResult } from './backtest/index.js'
+import { fetchMarginfiRate } from './rates/marginfi.js'
 
 const AI_HISTORY_PATH = process.env.AI_HISTORY_PATH ?? '/data/ai-history.json'
 const AI_HISTORY_MAX = 500
@@ -439,7 +440,7 @@ export class Keeper {
 
     return {
       kaminoSupplyRate: kaminoRate,
-      marginfiLendingRate: 0.065, // Mock — Marginfi SDK has broken IDL
+      marginfiLendingRate: await fetchMarginfiRate(),
       luloRegularRate: luloRate,
     }
   }
