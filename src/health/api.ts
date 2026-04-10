@@ -155,6 +155,7 @@ export function createApi(
         respond(res, 404, { error: 'Not found' })
       }
     } catch (err) {
+      console.error('[API] Request handler error:', err)
       respond(res, 500, { error: 'Internal server error' })
     }
   })

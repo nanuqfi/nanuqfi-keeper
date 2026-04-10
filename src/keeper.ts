@@ -180,7 +180,8 @@ export class Keeper {
       if (Array.isArray(parsed)) {
         this.aiHistory = parsed.slice(-AI_HISTORY_MAX)
       }
-    } catch {
+    } catch (err) {
+      console.warn('[Keeper] Failed to load AI history:', err)
       this.aiHistory = []
     }
   }
@@ -203,7 +204,8 @@ export class Keeper {
         this.decisions = parsed.slice(-this.maxDecisionHistory)
         console.log(`[Keeper] Loaded ${this.decisions.length} decisions from disk`)
       }
-    } catch {
+    } catch (err) {
+      console.warn('[Keeper] Failed to load decision history:', err)
       this.decisions = []
     }
   }
@@ -415,8 +417,8 @@ export class Keeper {
         const usdc = data.find(r => r.liquidityToken === 'USDC')
         if (usdc) kaminoRate = Number(usdc.supplyApy)
       }
-    } catch {
-      // Use fallback rate
+    } catch (err) {
+      console.warn('[Kamino] Rate fetch failed, using fallback:', err)
     }
 
     let luloRate = 0.07 // fallback
@@ -434,8 +436,8 @@ export class Keeper {
           }
         }
       }
-    } catch {
-      // Use fallback rate
+    } catch (err) {
+      console.warn('[Lulo] Rate fetch failed, using fallback:', err)
     }
 
     return {
@@ -484,8 +486,8 @@ export class Keeper {
           this.monitor.setRpcStatus('healthy')
           return
         }
-      } catch {
-        // Try next RPC
+      } catch (err) {
+        console.warn('[RPC] Check failed for endpoint, trying next:', err)
       }
     }
     this.monitor.setRpcStatus('down')
