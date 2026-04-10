@@ -38,12 +38,22 @@ export interface KeeperDataSource {
   getBacktestResult?(): Promise<BacktestResult | null>
 }
 
-const ALLOWED_ORIGINS = process.env.CORS_ALLOWED_ORIGINS ?? 'http://localhost:3000'
+const ALLOWED_ORIGINS = new Set(
+  (process.env.CORS_ALLOWED_ORIGINS ?? 'http://localhost:3000').split(',').map(s => s.trim())
+)
 
 const RATE_LIMIT_WINDOW_MS = 60_000 // 1 minute
 const RATE_LIMIT_MAX = 60 // 60 requests per minute
 
 const requestCounts = new Map<string, { count: number; resetAt: number }>()
+
+// Periodic cleanup of expired rate limit entries (prevent unbounded growth)
+setInterval(() => {
+  const now = Date.now()
+  for (const [ip, entry] of requestCounts) {
+    if (now > entry.resetAt) requestCounts.delete(ip)
+  }
+}, 300_000)
 
 function isRateLimited(ip: string): boolean {
   const now = Date.now()
@@ -65,7 +75,13 @@ export function createApi(
 ) {
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     res.setHeader('Content-Type', 'application/json')
-    res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGINS)
+    const origin = req.headers.origin ?? ''
+    if (ALLOWED_ORIGINS.has(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin)
+      res.setHeader('Vary', 'Origin')
+    } else if (ALLOWED_ORIGINS.has('*')) {
+      res.setHeader('Access-Control-Allow-Origin', '*')
+    }
     res.setHeader('X-Content-Type-Options', 'nosniff')
     res.setHeader('X-Frame-Options', 'DENY')
     res.setHeader('X-XSS-Protection', '1; mode=block')
@@ -92,11 +108,13 @@ export function createApi(
         respond(res, 200, vault)
       } else if (path.match(/^\/v1\/vaults\/(conservative|moderate|aggressive)\/history$/)) {
         const level = path.split('/')[3]
-        const limit = Math.min(Number(url.searchParams.get('limit') ?? 50), 100)
+        const rawLimit = Number(url.searchParams.get('limit') ?? 50)
+        const limit = Math.min(Number.isFinite(rawLimit) && rawLimit >= 0 ? rawLimit : 50, 100)
         respond(res, 200, data.getHistory(level, limit))
       } else if (path.match(/^\/v1\/vaults\/(conservative|moderate|aggressive)\/decisions$/)) {
         const level = path.split('/')[3]
-        const limit = Math.min(Number(url.searchParams.get('limit') ?? 10), 100)
+        const rawLimit = Number(url.searchParams.get('limit') ?? 10)
+        const limit = Math.min(Number.isFinite(rawLimit) && rawLimit >= 0 ? rawLimit : 10, 100)
         respond(res, 200, data.getDecisions(level, limit))
       } else if (path === '/v1/yields') {
         // Enhanced: return live yield data if available, fall back to static yields
@@ -117,7 +135,8 @@ export function createApi(
           respond(res, 200, scan)
         }
       } else if (path === '/v1/decisions') {
-        const limit = Math.min(Number(url.searchParams.get('limit') ?? 20), 100)
+        const rawLimit = Number(url.searchParams.get('limit') ?? 20)
+        const limit = Math.min(Number.isFinite(rawLimit) && rawLimit >= 0 ? rawLimit : 20, 100)
         const decisions = data.getKeeperDecisions?.(limit) ?? []
         respond(res, 200, decisions)
       } else if (path === '/v1/status') {
@@ -132,7 +151,8 @@ export function createApi(
           insight,
         })
       } else if (path === '/v1/ai/history') {
-        const limit = Math.min(Number(url.searchParams.get('limit') ?? 20), 100)
+        const rawLimit = Number(url.searchParams.get('limit') ?? 20)
+        const limit = Math.min(Number.isFinite(rawLimit) && rawLimit >= 0 ? rawLimit : 20, 100)
         const history = data.getAIHistory?.(limit) ?? []
         respond(res, 200, history)
       } else if (path === '/v1/backtest') {
