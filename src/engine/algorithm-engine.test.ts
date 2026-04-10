@@ -392,7 +392,7 @@ function makeMarketScan(overrides: Partial<MarketScan> = {}): MarketScan {
       medium: makeOpp('Marginfi', 0.12, 'medium'),
       high: null,
     },
-    driftComparison: { driftBestApy: 0, marketBestApy: 0.12, driftRank: 4, totalScanned: 3 },
+    marketComparison: { marketBestApy: 0.12, marketRank: 4, totalScanned: 3 },
     ...overrides,
   }
 }

@@ -147,7 +147,7 @@ describe('Keeper', () => {
     const scan = keeper.getMarketScan()
     expect(scan).not.toBeNull()
     expect(scan!.timestamp).toBeGreaterThan(0)
-    expect(scan!.driftComparison).toBeDefined()
+    expect(scan!.marketComparison).toBeDefined()
   })
 
   it('both vaults include kamino-lending, marginfi-lending, and lulo-lending backends', async () => {

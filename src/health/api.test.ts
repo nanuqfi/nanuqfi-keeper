@@ -138,7 +138,7 @@ describe('Keeper REST API — enriched endpoints', () => {
         medium: null,
         high: null,
       },
-      driftComparison: { driftBestApy: 0, marketBestApy: 0.08, driftRank: 3, totalScanned: 2 },
+      marketComparison: { marketBestApy: 0.08, marketRank: 3, totalScanned: 2 },
     }),
     getKeeperDecisions: (limit = 20) => [
       {
@@ -201,9 +201,9 @@ describe('Keeper REST API — enriched endpoints', () => {
   it('GET /v1/market-scan returns scan with opportunities', async () => {
     const { status, body } = await get('/v1/market-scan')
     expect(status).toBe(200)
-    const scan = body as { opportunities: unknown[]; driftComparison: { driftRank: number } }
+    const scan = body as { opportunities: unknown[]; marketComparison: { marketRank: number } }
     expect(scan.opportunities).toHaveLength(2)
-    expect(scan.driftComparison.driftRank).toBe(3)
+    expect(scan.marketComparison.marketRank).toBe(3)
   })
 
   it('GET /v1/decisions returns keeper decisions', async () => {

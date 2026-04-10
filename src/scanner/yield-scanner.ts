@@ -22,10 +22,10 @@ export interface MarketScan {
     medium: YieldOpportunity | null
     high: YieldOpportunity | null
   }
-  driftComparison: {
-    driftBestApy: number
+  /** Market-wide comparison stats — best APY found and total protocols scanned. */
+  marketComparison: {
     marketBestApy: number
-    driftRank: number
+    marketRank: number
     totalScanned: number
   }
 }
@@ -52,17 +52,15 @@ export async function scanDeFiYields(signal?: AbortSignal): Promise<MarketScan> 
     high: opportunities.find(o => o.risk === 'high') ?? null,
   }
 
-  // driftComparison shape kept for API compatibility — always empty now
   const marketBestApy = opportunities.length > 0 ? opportunities[0]!.apy : 0
 
   return {
     timestamp: Date.now(),
     opportunities,
     bestByRisk,
-    driftComparison: {
-      driftBestApy: 0,
+    marketComparison: {
       marketBestApy,
-      driftRank: opportunities.length + 1,
+      marketRank: opportunities.length + 1,
       totalScanned: opportunities.length,
     },
   }

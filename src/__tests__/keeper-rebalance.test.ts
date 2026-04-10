@@ -23,8 +23,9 @@ vi.mock('../chain/state.js', () => ({
 vi.mock('../scanner/yield-scanner.js', () => ({
   scanDeFiYields: vi.fn().mockResolvedValue({
     timestamp: Date.now(),
-    protocols: [],
-    driftComparison: { kaminoVsDrift: 0, marginfiVsDrift: 0, luloVsDrift: 0 },
+    opportunities: [],
+    bestByRisk: { low: null, medium: null, high: null },
+    marketComparison: { marketBestApy: 0, marketRank: 1, totalScanned: 0 },
   }),
 }))
 
