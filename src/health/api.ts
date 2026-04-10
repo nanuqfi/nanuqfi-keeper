@@ -40,6 +40,24 @@ export interface KeeperDataSource {
 
 const ALLOWED_ORIGINS = process.env.CORS_ALLOWED_ORIGINS ?? 'http://localhost:3000'
 
+const RATE_LIMIT_WINDOW_MS = 60_000 // 1 minute
+const RATE_LIMIT_MAX = 60 // 60 requests per minute
+
+const requestCounts = new Map<string, { count: number; resetAt: number }>()
+
+function isRateLimited(ip: string): boolean {
+  const now = Date.now()
+  const entry = requestCounts.get(ip)
+
+  if (!entry || now > entry.resetAt) {
+    requestCounts.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS })
+    return false
+  }
+
+  entry.count++
+  return entry.count > RATE_LIMIT_MAX
+}
+
 export function createApi(
   monitor: HealthMonitor,
   data: KeeperDataSource,
@@ -52,6 +70,12 @@ export function createApi(
     res.setHeader('X-Frame-Options', 'DENY')
     res.setHeader('X-XSS-Protection', '1; mode=block')
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+
+    const ip = req.socket.remoteAddress ?? 'unknown'
+    if (isRateLimited(ip)) {
+      respond(res, 429, { error: 'Too many requests' })
+      return
+    }
 
     const url = new URL(req.url ?? '/', `http://localhost:${port}`)
     const path = url.pathname
@@ -68,11 +92,11 @@ export function createApi(
         respond(res, 200, vault)
       } else if (path.match(/^\/v1\/vaults\/(conservative|moderate|aggressive)\/history$/)) {
         const level = path.split('/')[3]
-        const limit = Number(url.searchParams.get('limit') ?? 50)
+        const limit = Math.min(Number(url.searchParams.get('limit') ?? 50), 100)
         respond(res, 200, data.getHistory(level, limit))
       } else if (path.match(/^\/v1\/vaults\/(conservative|moderate|aggressive)\/decisions$/)) {
         const level = path.split('/')[3]
-        const limit = Number(url.searchParams.get('limit') ?? 10)
+        const limit = Math.min(Number(url.searchParams.get('limit') ?? 10), 100)
         respond(res, 200, data.getDecisions(level, limit))
       } else if (path === '/v1/yields') {
         // Enhanced: return live yield data if available, fall back to static yields
@@ -93,7 +117,7 @@ export function createApi(
           respond(res, 200, scan)
         }
       } else if (path === '/v1/decisions') {
-        const limit = Number(url.searchParams.get('limit') ?? 20)
+        const limit = Math.min(Number(url.searchParams.get('limit') ?? 20), 100)
         const decisions = data.getKeeperDecisions?.(limit) ?? []
         respond(res, 200, decisions)
       } else if (path === '/v1/status') {
