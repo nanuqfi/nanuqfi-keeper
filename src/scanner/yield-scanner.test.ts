@@ -70,8 +70,7 @@ describe('scanDeFiYields', () => {
     // bestByRisk populated
     expect(scan.bestByRisk.low).not.toBeNull()
 
-    // driftComparison shape present for API compatibility
-    expect(scan.driftComparison.totalScanned).toBeGreaterThan(0)
+    expect(scan.marketComparison.totalScanned).toBeGreaterThan(0)
   })
 
   it('bestByRisk picks the highest-APY opportunity per risk tier', async () => {
@@ -104,9 +103,8 @@ describe('scanDeFiYields', () => {
 
     expect(scan.opportunities).toHaveLength(0)
     expect(scan.bestByRisk.low).toBeNull()
-    expect(scan.driftComparison.driftBestApy).toBe(0)
-    expect(scan.driftComparison.marketBestApy).toBe(0)
-    expect(scan.driftComparison.totalScanned).toBe(0)
+    expect(scan.marketComparison.marketBestApy).toBe(0)
+    expect(scan.marketComparison.totalScanned).toBe(0)
   })
 
   it('handles all APIs failing without crashing', async () => {
@@ -118,9 +116,8 @@ describe('scanDeFiYields', () => {
     expect(scan.bestByRisk.low).toBeNull()
     expect(scan.bestByRisk.medium).toBeNull()
     expect(scan.bestByRisk.high).toBeNull()
-    expect(scan.driftComparison.driftBestApy).toBe(0)
-    expect(scan.driftComparison.marketBestApy).toBe(0)
-    expect(scan.driftComparison.totalScanned).toBe(0)
+    expect(scan.marketComparison.marketBestApy).toBe(0)
+    expect(scan.marketComparison.totalScanned).toBe(0)
   })
 })
 

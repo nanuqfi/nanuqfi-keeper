@@ -36,6 +36,7 @@ export interface KeeperDataSource {
   getAIInsight?(): import('../ai/index.js').AIInsight | null
   getAIHistory?(limit?: number): import('../ai/index.js').AIInsight[]
   getBacktestResult?(): Promise<BacktestResult | null>
+  getCurrentWeights?(): Record<string, Record<string, number>>
 }
 
 const ALLOWED_ORIGINS = new Set(
@@ -155,6 +156,36 @@ export function createApi(
         const limit = Math.min(Number.isFinite(rawLimit) && rawLimit >= 0 ? rawLimit : 20, 100)
         const history = data.getAIHistory?.(limit) ?? []
         respond(res, 200, history)
+      } else if (path === '/v1/metrics') {
+        const status = monitor.getStatus()
+        const totalCycles = status.cyclesCompleted + status.cyclesFailed
+        const failureRate = totalCycles > 0 ? status.cyclesFailed / totalCycles : 0
+        const lastDecisions = data.getKeeperDecisions?.(1) ?? []
+        const lastRebalanceTimestamp = lastDecisions[0]?.timestamp ?? null
+        const aiInsight = data.getAIInsight?.() ?? null
+        const weights = data.getCurrentWeights?.() ?? {}
+
+        // Summarise rate limit stats from the current request counts snapshot
+        const rateLimitStats = {
+          windowMs: RATE_LIMIT_WINDOW_MS,
+          maxPerWindow: RATE_LIMIT_MAX,
+          activeIps: requestCounts.size,
+        }
+
+        respond(res, 200, {
+          uptime: status.uptime,
+          cycleCount: status.cyclesCompleted,
+          failureRate: Math.round(failureRate * 10000) / 10000,
+          lastRebalanceTimestamp,
+          weights,
+          aiLayer: {
+            status: status.aiLayerStatus,
+            lastInsightTimestamp: aiInsight?.timestamp ?? null,
+            regime: aiInsight?.regime ?? null,
+          },
+          rpcStatus: status.rpcStatus,
+          rateLimitStats,
+        })
       } else if (path === '/v1/backtest') {
         const backtestPromise = data.getBacktestResult
           ? data.getBacktestResult()

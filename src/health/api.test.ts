@@ -138,7 +138,7 @@ describe('Keeper REST API — enriched endpoints', () => {
         medium: null,
         high: null,
       },
-      driftComparison: { driftBestApy: 0, marketBestApy: 0.08, driftRank: 3, totalScanned: 2 },
+      marketComparison: { marketBestApy: 0.08, marketRank: 3, totalScanned: 2 },
     }),
     getKeeperDecisions: (limit = 20) => [
       {
@@ -171,6 +171,10 @@ describe('Keeper REST API — enriched endpoints', () => {
       dataPoints: 21000,
       riskFreeRate: 0.04,
     }),
+    getCurrentWeights: () => ({
+      moderate: { 'kamino-lending': 6000, 'marginfi-lending': 4000 },
+      aggressive: { 'kamino-lending': 4000, 'marginfi-lending': 3000, 'lulo-lending': 3000 },
+    }),
   }
 
   const api = createApi(monitor, enrichedData, 0)
@@ -201,9 +205,9 @@ describe('Keeper REST API — enriched endpoints', () => {
   it('GET /v1/market-scan returns scan with opportunities', async () => {
     const { status, body } = await get('/v1/market-scan')
     expect(status).toBe(200)
-    const scan = body as { opportunities: unknown[]; driftComparison: { driftRank: number } }
+    const scan = body as { opportunities: unknown[]; marketComparison: { marketRank: number } }
     expect(scan.opportunities).toHaveLength(2)
-    expect(scan.driftComparison.driftRank).toBe(3)
+    expect(scan.marketComparison.marketRank).toBe(3)
   })
 
   it('GET /v1/decisions returns keeper decisions', async () => {
@@ -241,5 +245,45 @@ describe('Keeper REST API — enriched endpoints', () => {
     expect(result.totalReturn).toBe(0.15)
     expect(result.sharpeRatio).toBe(8.5)
     expect(result.protocols['kamino-lending']).toBeDefined()
+  })
+
+  it('GET /v1/metrics returns structured metrics', async () => {
+    const { status, body } = await get('/v1/metrics')
+    expect(status).toBe(200)
+
+    const metrics = body as {
+      uptime: number
+      cycleCount: number
+      failureRate: number
+      lastRebalanceTimestamp: number | null
+      weights: Record<string, Record<string, number>>
+      aiLayer: { status: string; lastInsightTimestamp: number | null; regime: string | null }
+      rpcStatus: string
+      rateLimitStats: { windowMs: number; maxPerWindow: number; activeIps: number }
+    }
+
+    expect(typeof metrics.uptime).toBe('number')
+    expect(typeof metrics.cycleCount).toBe('number')
+    expect(typeof metrics.failureRate).toBe('number')
+    expect(metrics.failureRate).toBeGreaterThanOrEqual(0)
+    expect(metrics.failureRate).toBeLessThanOrEqual(1)
+
+    // Weights from getCurrentWeights mock
+    expect(metrics.weights).toBeDefined()
+    expect(metrics.weights['moderate']).toBeDefined()
+    expect(metrics.weights['moderate']!['kamino-lending']).toBe(6000)
+
+    // AI layer shape
+    expect(metrics.aiLayer).toBeDefined()
+    expect(typeof metrics.aiLayer.status).toBe('string')
+    expect(['available', 'degraded', 'unavailable']).toContain(metrics.aiLayer.status)
+
+    // Rate limit stats
+    expect(metrics.rateLimitStats.windowMs).toBe(60_000)
+    expect(metrics.rateLimitStats.maxPerWindow).toBe(60)
+    expect(typeof metrics.rateLimitStats.activeIps).toBe('number')
+
+    // lastRebalanceTimestamp — from mock decision at 1710500000000
+    expect(metrics.lastRebalanceTimestamp).toBe(1710500000000)
   })
 })

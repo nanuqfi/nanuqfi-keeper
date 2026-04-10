@@ -3,8 +3,6 @@ import { checkAutoExit, type AutoExitContext } from './auto-exit.js'
 import type { AIInsight } from '../ai/index.js'
 import type { MarketScan } from '../scanner/index.js'
 
-const PERP_STRATEGIES = new Set<string>()
-
 // SOL-exposed strategies affected by oracle divergence
 const SOL_EXPOSED = new Set<string>()
 
@@ -14,15 +12,6 @@ const BACKEND_RISK_TIER: Record<string, 'low' | 'medium' | 'high'> = {
   'marginfi-lending': 'low',
   'lulo-lending': 'low',
 }
-
-// Max perp allocation per risk level (basis points)
-const PERP_CAP_BPS: Record<string, number> = {
-  conservative: 3000,
-  moderate: 6000,
-  aggressive: 7000,
-}
-
-const LENDING_BACKEND = 'kamino-lending'
 
 export interface ProposalContext {
   marketScan?: MarketScan
@@ -57,9 +46,8 @@ export interface WeightProposal {
  *
  * Each cycle:
  *  1. Evaluate auto-exit for every backend.
- *  2. Score the surviving backends (with AI, market scan, oracle, and slope modifiers).
+ *  2. Score the surviving backends (with AI, market scan, oracle, and regime modifiers).
  *  3. Allocate proportionally to risk-adjusted score, rounding to whole bps.
- *  4. Enforce perp concentration cap — redistribute overflow to lending.
  *     Any rounding remainder is added to the highest-scoring backend.
  */
 export class AlgorithmEngine {
@@ -84,9 +72,6 @@ export class AlgorithmEngine {
       if (aiInsight) {
         const confidence = aiInsight.strategies[backend.name] ?? 1.0
         score *= confidence
-        if (aiInsight.riskElevated && PERP_STRATEGIES.has(backend.name)) {
-          score *= 0.5
-        }
         // Regime multipliers
         if (aiInsight.regime) {
           score *= getRegimeMultiplier(backend.name, aiInsight.regime)
@@ -125,9 +110,6 @@ export class AlgorithmEngine {
     // Step 3 — proportional allocation in basis points
     const weights = this.allocateWeights(surviving)
 
-    // Step 4 — enforce perp concentration cap (Phase 1B)
-    this.enforcePerCap(weights, state.riskLevel, surviving)
-
     return { weights, excludedBackends: excluded, scores }
   }
 
@@ -163,41 +145,6 @@ export class AlgorithmEngine {
     const weights: Record<string, number> = {}
     rawWeights.forEach(w => { weights[w.name] = w.bps })
     return weights
-  }
-
-  private enforcePerCap(
-    weights: Record<string, number>,
-    riskLevel: string,
-    surviving: Array<{ name: string; score: number }>,
-  ): void {
-    const cap = PERP_CAP_BPS[riskLevel] ?? PERP_CAP_BPS['moderate']!
-    const perpNames = surviving.filter(b => PERP_STRATEGIES.has(b.name)).map(b => b.name)
-    const lendingPresent = LENDING_BACKEND in weights
-
-    if (perpNames.length === 0 || !lendingPresent) return
-
-    const perpTotal = perpNames.reduce((sum, n) => sum + (weights[n] ?? 0), 0)
-    if (perpTotal <= cap) return
-
-    // Scale perp strategies proportionally to fit cap
-    const scaleFactor = cap / perpTotal
-    let overflow = 0
-
-    for (const name of perpNames) {
-      const original = weights[name] ?? 0
-      const scaled = Math.floor(original * scaleFactor)
-      overflow += original - scaled
-      weights[name] = scaled
-    }
-
-    // Redistribute overflow to lending
-    weights[LENDING_BACKEND] = (weights[LENDING_BACKEND] ?? 0) + overflow
-
-    // Fix rounding: ensure sum is exactly 10 000
-    const total = Object.values(weights).reduce((s, v) => s + v, 0)
-    if (total !== 10_000) {
-      weights[LENDING_BACKEND] += 10_000 - total
-    }
   }
 }
 
