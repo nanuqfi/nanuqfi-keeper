@@ -369,4 +369,44 @@ describe('validateAIInsight', () => {
     expect(result.valid).toBe(true)
     expect(result.insight?.regime).toBeUndefined()
   })
+
+  // ─── Strategy name validation against known backends ──────────────────────
+
+  it('rejects unknown strategy name — unknown-protocol', () => {
+    const raw = JSON.stringify({
+      strategies: { 'unknown-protocol': 0.8 },
+      risk_elevated: false,
+      reasoning: 'Testing unknown backend.',
+    })
+    const result = validateAIInsight(raw)
+    expect(result.valid).toBe(false)
+    expect(result.rejectionReason).toContain('unknown-protocol')
+    expect(result.rejectionReason).toContain('known backend')
+  })
+
+  it('rejects mix of known and unknown strategy names', () => {
+    const raw = JSON.stringify({
+      strategies: { 'kamino-lending': 0.9, 'drift-perp': 0.5 },
+      risk_elevated: false,
+      reasoning: 'Mix of valid and invalid.',
+    })
+    const result = validateAIInsight(raw)
+    expect(result.valid).toBe(false)
+    expect(result.rejectionReason).toContain('drift-perp')
+  })
+
+  it('accepts all three known backends together', () => {
+    const raw = JSON.stringify({
+      strategies: {
+        'kamino-lending': 0.95,
+        'marginfi-lending': 0.7,
+        'lulo-lending': 0.6,
+      },
+      risk_elevated: false,
+      reasoning: 'All backends healthy.',
+    })
+    const result = validateAIInsight(raw)
+    expect(result.valid).toBe(true)
+    expect(result.insight?.strategies['lulo-lending']).toBe(0.6)
+  })
 })
