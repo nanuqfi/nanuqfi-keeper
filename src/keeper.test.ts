@@ -184,10 +184,6 @@ describe('Keeper', () => {
 describe('AI cycle', () => {
   const originalFetchAI = globalThis.fetch
 
-  afterEach(() => {
-    globalThis.fetch = originalFetchAI
-  })
-
   function mockFetchForAICycle() {
     globalThis.fetch = vi.fn().mockImplementation((url: string) => {
       if (typeof url === 'string' && url.includes('llama.fi')) {
@@ -199,6 +195,16 @@ describe('AI cycle', () => {
       return Promise.resolve({ ok: true, json: async () => ({}) })
     })
   }
+
+  // fetchYieldData now calls fetchMarginfiRate which hits yields.llama.fi.
+  // All AI cycle tests must have a fetch mock in place to avoid real network calls.
+  beforeEach(() => {
+    mockFetchForAICycle()
+  })
+
+  afterEach(() => {
+    globalThis.fetch = originalFetchAI
+  })
 
   it('stores AI insight when AI provider returns valid response', async () => {
     const mockAi = {

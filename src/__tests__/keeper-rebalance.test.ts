@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { PublicKey } from '@solana/web3.js'
 
 // Mock external dependencies before importing anything that uses them.
 // Vitest hoists vi.mock calls so order doesn't matter, but they must be
@@ -15,6 +16,10 @@ vi.mock('../chain/rebalance.js', () => ({
   PROGRAM_ID: 'mock-program-id',
 }))
 
+vi.mock('../chain/state.js', () => ({
+  fetchRebalanceChainState: vi.fn(),
+}))
+
 vi.mock('../scanner/yield-scanner.js', () => ({
   scanDeFiYields: vi.fn().mockResolvedValue({
     timestamp: Date.now(),
@@ -28,12 +33,24 @@ vi.mock('../ai/prompt-builder.js', () => ({
 }))
 
 import { submitRebalance } from '../chain/rebalance.js'
+import { fetchRebalanceChainState } from '../chain/state.js'
 import { Keeper } from '../keeper.js'
 import { HealthMonitor } from '../health/monitor.js'
 import type { KeeperConfig } from '../config.js'
 import type { KeeperDecision } from '../keeper.js'
 
 const mockSubmitRebalance = vi.mocked(submitRebalance)
+const mockFetchChainState = vi.mocked(fetchRebalanceChainState)
+
+// Stable mock chain state values — tests that care about specific values override these.
+const MOCK_VAULT_USDC = new PublicKey('So11111111111111111111111111111111111111112')
+const MOCK_TREASURY_USDC = new PublicKey('SysvarRent111111111111111111111111111111111')
+const MOCK_CHAIN_STATE = {
+  rebalanceCounter: 7,
+  vaultUsdcAddress: MOCK_VAULT_USDC,
+  treasuryUsdcAddress: MOCK_TREASURY_USDC,
+  equitySnapshot: 250_000_000n, // 250 USDC (6 decimals)
+}
 
 const mockConfig: KeeperConfig = {
   rpcUrls: ['https://test-rpc.com'],
@@ -81,6 +98,9 @@ describe('keeper rebalance awaiting', () => {
       marginfiLendingRate: 0.065,
       luloRegularRate: 0.07,
     })
+
+    // Default: chain state fetch succeeds with stable mock values
+    mockFetchChainState.mockResolvedValue(MOCK_CHAIN_STATE)
 
     // Inject a spy alerter so we can assert on alert calls
     alertSpy = vi.fn().mockResolvedValue(undefined)
@@ -244,5 +264,39 @@ describe('keeper rebalance awaiting', () => {
 
     // Legacy decisions (no txStatus) are treated as confirmed for backward compat
     expect((keeper as any).currentWeights['moderate']).toEqual(legacyWeights)
+  })
+
+  it('submitRebalance receives real chain state params (counter, equity, addresses)', async () => {
+    mockSubmitRebalance.mockResolvedValue({ success: true, txSignature: 'chain-state-sig' })
+
+    await keeper.runCycle()
+
+    expect(mockSubmitRebalance).toHaveBeenCalled()
+
+    // Both vaults (moderate + aggressive) are processed per cycle
+    const calls = mockSubmitRebalance.mock.calls
+    for (const [params] of calls) {
+      // rebalanceCounter must come from chain state (7), not decisions.length
+      expect(params.rebalanceCounter).toBe(MOCK_CHAIN_STATE.rebalanceCounter)
+      // equitySnapshot must be the real balance, not 0n
+      expect(params.equitySnapshot).toBe(MOCK_CHAIN_STATE.equitySnapshot)
+      // Addresses must be the real PDAs, not System Program
+      expect(params.vaultUsdcAddress.toBase58()).toBe(MOCK_VAULT_USDC.toBase58())
+      expect(params.treasuryUsdcAddress.toBase58()).toBe(MOCK_TREASURY_USDC.toBase58())
+    }
+  })
+
+  it('chain state fetch failure marks decision failed and sends alert', async () => {
+    mockFetchChainState.mockRejectedValue(new Error('RiskVault account not found for moderate'))
+
+    await keeper.runCycle()
+
+    const decisions: KeeperDecision[] = keeper.getDecisions()
+    const failed = decisions.filter(d => d.txStatus === 'failed')
+    expect(failed.length).toBeGreaterThan(0)
+
+    expect(alertSpy).toHaveBeenCalledWith(
+      expect.stringContaining('RiskVault account not found'),
+    )
   })
 })

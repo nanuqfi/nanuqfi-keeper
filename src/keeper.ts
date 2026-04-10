@@ -4,10 +4,12 @@ import { HealthMonitor } from './health/monitor.js'
 import { AlgorithmEngine, type BackendConfig, type VaultState, type WeightProposal, type ProposalContext } from './engine/index.js'
 import { scanDeFiYields, type MarketScan } from './scanner/index.js'
 import { createAlerter, type Alerter } from './alerts/index.js'
-import { submitRebalance, riskLevelToIndex, type RebalanceResult } from './chain/index.js'
+import { submitRebalance, type RebalanceResult } from './chain/index.js'
+import { fetchRebalanceChainState } from './chain/state.js'
 import { AIProvider, buildInsightPrompt, validateAIInsight, type AIInsight, type MarketContext } from './ai/index.js'
 import { runBacktest, fetchHistoricalData, DEFAULT_CONFIG } from './backtest/index.js'
 import type { BacktestResult } from './backtest/index.js'
+import { fetchMarginfiRate } from './rates/marginfi.js'
 
 const AI_HISTORY_PATH = process.env.AI_HISTORY_PATH ?? '/data/ai-history.json'
 const AI_HISTORY_MAX = 500
@@ -339,16 +341,21 @@ export class Keeper {
           if (decision) decision.txStatus = 'pending'
 
           try {
+            // Fetch real on-chain state: per-vault counter (PDA seed), USDC
+            // addresses, and current equity. Must happen before submitRebalance
+            // so the instruction lands with correct account keys.
+            const chainState = await fetchRebalanceChainState(this.config.rpcUrls[0], riskLevel)
+
             const result = await submitRebalance({
               rpcUrl: this.config.rpcUrls[0],
               keypairPath: this.config.keeperKeypairPath,
               riskLevel,
               weights: proposal.weights,
               reasoning,
-              rebalanceCounter: this.decisions.length,
-              equitySnapshot: 0n,
-              vaultUsdcAddress: new (await import('@solana/web3.js')).PublicKey('11111111111111111111111111111111'),
-              treasuryUsdcAddress: new (await import('@solana/web3.js')).PublicKey('11111111111111111111111111111111'),
+              rebalanceCounter: chainState.rebalanceCounter,
+              equitySnapshot: chainState.equitySnapshot,
+              vaultUsdcAddress: chainState.vaultUsdcAddress,
+              treasuryUsdcAddress: chainState.treasuryUsdcAddress,
             })
 
             if (result.success) {
@@ -433,7 +440,7 @@ export class Keeper {
 
     return {
       kaminoSupplyRate: kaminoRate,
-      marginfiLendingRate: 0.065, // Mock — Marginfi SDK has broken IDL
+      marginfiLendingRate: await fetchMarginfiRate(),
       luloRegularRate: luloRate,
     }
   }
