@@ -56,6 +56,20 @@ export function validateConfig(config: KeeperConfig): void {
     }
   }
 
+  // aiMaxCallsPerHour — must be a positive finite number when provided
+  if (config.aiMaxCallsPerHour !== undefined) {
+    if (!Number.isFinite(config.aiMaxCallsPerHour) || config.aiMaxCallsPerHour <= 0) {
+      errors.push('AI_MAX_CALLS_PER_HOUR must be a positive number')
+    }
+  }
+
+  // aiBudgetPerDay — must be a positive finite number when provided
+  if (config.aiBudgetPerDay !== undefined) {
+    if (!Number.isFinite(config.aiBudgetPerDay) || config.aiBudgetPerDay <= 0) {
+      errors.push('AI_BUDGET_PER_DAY must be a positive number')
+    }
+  }
+
   // keeperKeypairPath — if provided (non-empty string), must actually be a string
   if (config.keeperKeypairPath !== '' && typeof config.keeperKeypairPath !== 'string') {
     errors.push(

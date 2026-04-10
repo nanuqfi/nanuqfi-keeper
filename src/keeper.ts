@@ -244,7 +244,7 @@ export class Keeper {
     }
 
     try {
-      const yieldData = this.latestYieldData ?? await this.fetchYieldData()
+      const yieldData = this.latestYieldData ?? await this.fetchYieldData(AbortSignal.timeout(30_000))
       const weights = this.currentWeights
 
       const context: MarketContext = {

@@ -90,6 +90,42 @@ describe('validateConfig', () => {
     })
   })
 
+  describe('aiMaxCallsPerHour', () => {
+    it('throws when aiMaxCallsPerHour is NaN', () => {
+      expect(() => validateConfig(validConfig({ aiMaxCallsPerHour: NaN }))).toThrow(
+        /AI_MAX_CALLS_PER_HOUR/
+      )
+    })
+
+    it('throws when aiMaxCallsPerHour is negative', () => {
+      expect(() => validateConfig(validConfig({ aiMaxCallsPerHour: -1 }))).toThrow(
+        /AI_MAX_CALLS_PER_HOUR/
+      )
+    })
+
+    it('accepts a positive aiMaxCallsPerHour', () => {
+      expect(() => validateConfig(validConfig({ aiMaxCallsPerHour: 20 }))).not.toThrow()
+    })
+  })
+
+  describe('aiBudgetPerDay', () => {
+    it('throws when aiBudgetPerDay is NaN', () => {
+      expect(() => validateConfig(validConfig({ aiBudgetPerDay: NaN }))).toThrow(
+        /AI_BUDGET_PER_DAY/
+      )
+    })
+
+    it('throws when aiBudgetPerDay is negative', () => {
+      expect(() => validateConfig(validConfig({ aiBudgetPerDay: -5 }))).toThrow(
+        /AI_BUDGET_PER_DAY/
+      )
+    })
+
+    it('accepts a positive aiBudgetPerDay', () => {
+      expect(() => validateConfig(validConfig({ aiBudgetPerDay: 10 }))).not.toThrow()
+    })
+  })
+
   describe('error message quality', () => {
     it('error message includes actionable info about env var to fix', () => {
       let message = ''
