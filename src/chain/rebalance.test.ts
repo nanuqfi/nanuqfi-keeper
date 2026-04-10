@@ -148,8 +148,8 @@ vi.mock('@solana/web3.js', async () => {
   }
 })
 
-// readFileSync mock: returns valid keypair JSON for the test path, passes
-// through to the real impl for everything else (Anchor IDL etc).
+// readFileSync + existsSync mock: intercepts /mock/keeper.json, passes through
+// everything else to the real fs implementation (Anchor IDL files, etc).
 const testKeypair = Keypair.generate()
 const testKeypairJson = JSON.stringify(Array.from(testKeypair.secretKey))
 
@@ -157,9 +157,12 @@ vi.mock('node:fs', async () => {
   const actual = await vi.importActual<typeof import('node:fs')>('node:fs')
   return {
     ...actual,
+    existsSync: vi.fn((path: unknown) => {
+      if (path === '/mock/keeper.json') return true
+      return (actual.existsSync as (p: unknown) => boolean)(path)
+    }),
     readFileSync: vi.fn((path: unknown, enc?: unknown) => {
       if (path === '/mock/keeper.json') return testKeypairJson
-      // Real implementation for anything else
       return (actual.readFileSync as (...a: unknown[]) => unknown)(path, enc)
     }),
   }
@@ -218,12 +221,13 @@ describe('submitRebalance', () => {
     expect(mockSendAndConfirm).not.toHaveBeenCalled()
   })
 
-  it('returns success=false when keypair file is missing', async () => {
-    // /nonexistent path bypasses our mock and hits real fs → ENOENT
+  it('returns actionable error when keypair file does not exist', async () => {
+    // /nonexistent path — existsSync returns false → early return before readFileSync
     const result = await submitRebalance({ ...baseParams, keypairPath: '/nonexistent/keeper.json' })
 
     expect(result.success).toBe(false)
-    expect(result.error).toBeDefined()
+    expect(result.error).toContain('/nonexistent/keeper.json')
+    expect(result.error).toContain('KEEPER_KEYPAIR_PATH')
     expect(mockSendAndConfirm).not.toHaveBeenCalled()
   })
 
@@ -236,5 +240,28 @@ describe('submitRebalance', () => {
     // Third arg to sendAndConfirmTransaction is the signers array
     const signers = mockSendAndConfirm.mock.calls[0]![2] as Keypair[]
     expect(signers[0]!.publicKey.toBase58()).toBe(testKeypair.publicKey.toBase58())
+  })
+
+  it('returns success=false when expectedAuthority does not match loaded keypair', async () => {
+    const wrongAuthority = Keypair.generate().publicKey.toBase58()
+
+    const result = await submitRebalance({ ...baseParams, expectedAuthority: wrongAuthority })
+
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('Keypair pubkey mismatch')
+    expect(result.error).toContain(wrongAuthority)
+    expect(mockSendAndConfirm).not.toHaveBeenCalled()
+  })
+
+  it('proceeds normally when expectedAuthority matches loaded keypair', async () => {
+    mockSendAndConfirm.mockResolvedValue('sig-with-authority')
+
+    const result = await submitRebalance({
+      ...baseParams,
+      expectedAuthority: testKeypair.publicKey.toBase58(),
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.txSignature).toBe('sig-with-authority')
   })
 })

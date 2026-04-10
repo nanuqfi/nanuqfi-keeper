@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import {
   Connection,
   Keypair,
@@ -114,6 +114,12 @@ export interface RebalanceParams {
   equitySnapshot: bigint
   vaultUsdcAddress: PublicKey
   treasuryUsdcAddress: PublicKey
+  /**
+   * Optional: expected keeper authority public key (base58).
+   * When provided, `submitRebalance` validates that the loaded keypair
+   * matches this value before signing — prevents signing with wrong key.
+   */
+  expectedAuthority?: string
 }
 
 export interface RebalanceResult {
@@ -128,11 +134,38 @@ export interface RebalanceResult {
  * Uses raw instruction building (not IDL-generated client) to avoid
  * importing the full IDL at runtime. Discriminator is from the IDL:
  * rebalance = [108, 158, 77, 9, 210, 52, 88, 62]
+ *
+ * Validates keypair file exists before reading and optionally verifies the
+ * loaded public key matches `params.expectedAuthority` to catch key mismatches
+ * before any signing attempt.
  */
 export async function submitRebalance(params: RebalanceParams): Promise<RebalanceResult> {
   try {
+    // Guard: verify file exists with an actionable error before readFileSync
+    if (!existsSync(params.keypairPath)) {
+      return {
+        success: false,
+        error: `Keypair file not found: ${params.keypairPath} — set KEEPER_KEYPAIR_PATH to a valid path`,
+      }
+    }
+
     const keypairData = JSON.parse(readFileSync(params.keypairPath, 'utf-8'))
     const keeper = Keypair.fromSecretKey(new Uint8Array(keypairData))
+
+    // Log loaded public key so operators can verify identity at a glance
+    console.log(`[Chain] Keeper public key: ${keeper.publicKey.toBase58()}`)
+
+    // Guard: verify loaded key matches the expected authority if provided
+    if (params.expectedAuthority && keeper.publicKey.toBase58() !== params.expectedAuthority) {
+      return {
+        success: false,
+        error:
+          `Keypair pubkey mismatch — loaded ${keeper.publicKey.toBase58()} ` +
+          `but allocator expects ${params.expectedAuthority}. ` +
+          `Check KEEPER_KEYPAIR_PATH.`,
+      }
+    }
+
     const connection = new Connection(params.rpcUrl, 'confirmed')
 
     const riskIdx = riskLevelToIndex(params.riskLevel)
