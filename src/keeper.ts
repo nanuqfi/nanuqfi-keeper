@@ -292,12 +292,12 @@ export class Keeper {
     const timeout = setTimeout(() => controller.abort(), cycleTimeout)
 
     try {
-      // 1. Fetch real yield data
-      const yieldData = await this.fetchYieldData()
+      // 1. Fetch real yield data — pass cycle signal so fetches abort on timeout
+      const yieldData = await this.fetchYieldData(controller.signal)
       this.latestYieldData = yieldData
 
       // 2. Scan DeFi yields BEFORE proposing — feeds opportunity cost into scoring
-      const marketScan = await scanDeFiYields()
+      const marketScan = await scanDeFiYields(controller.signal)
       this.latestMarketScan = marketScan
 
       // 3. Build proposal context with market scan + oracle data
@@ -406,11 +406,12 @@ export class Keeper {
     }
   }
 
-  private async fetchYieldData(): Promise<YieldData> {
+  private async fetchYieldData(signal?: AbortSignal): Promise<YieldData> {
     let kaminoRate = 0.021 // fallback
     try {
       const res = await fetch(
-        'https://api.kamino.finance/kamino-market/7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfF/reserves/metrics'
+        'https://api.kamino.finance/kamino-market/7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfF/reserves/metrics',
+        { signal }
       )
       if (res.ok) {
         const data = await res.json() as { liquidityToken: string; supplyApy: string }[]
@@ -427,7 +428,7 @@ export class Keeper {
       if (luloApiKey) {
         const luloRes = await fetch(
           'https://api.lulo.fi/v1/rates.getRates',
-          { headers: { 'x-api-key': luloApiKey, 'Content-Type': 'application/json' } }
+          { headers: { 'x-api-key': luloApiKey, 'Content-Type': 'application/json' }, signal }
         )
         if (luloRes.ok) {
           const luloData = await luloRes.json() as { regular?: { CURRENT?: number } }
@@ -442,7 +443,7 @@ export class Keeper {
 
     return {
       kaminoSupplyRate: kaminoRate,
-      marginfiLendingRate: await fetchMarginfiRate(),
+      marginfiLendingRate: await fetchMarginfiRate(signal),
       luloRegularRate: luloRate,
     }
   }

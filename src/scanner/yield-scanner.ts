@@ -30,12 +30,12 @@ export interface MarketScan {
   }
 }
 
-export async function scanDeFiYields(): Promise<MarketScan> {
+export async function scanDeFiYields(signal?: AbortSignal): Promise<MarketScan> {
   const opportunities: YieldOpportunity[] = []
 
   // DeFi Llama — aggregate yields across Solana
   try {
-    const llamaYields = await fetchDeFiLlamaYields()
+    const llamaYields = await fetchDeFiLlamaYields(signal)
     opportunities.push(...llamaYields)
   } catch (err) {
     console.warn('[Scanner] DeFi Llama scan failed:', err)
@@ -87,9 +87,11 @@ interface DeFiLlamaResponse {
   data: DeFiLlamaPool[]
 }
 
-export async function fetchDeFiLlamaYields(): Promise<YieldOpportunity[]> {
+export async function fetchDeFiLlamaYields(parentSignal?: AbortSignal): Promise<YieldOpportunity[]> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+  // Propagate parent abort (e.g. cycle timeout) into this fetch
+  parentSignal?.addEventListener('abort', () => controller.abort(), { once: true })
 
   try {
     const res = await fetch(DEFILLAMA_YIELDS_URL, { signal: controller.signal })
