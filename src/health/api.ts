@@ -38,6 +38,8 @@ export interface KeeperDataSource {
   getBacktestResult?(): Promise<BacktestResult | null>
 }
 
+const ALLOWED_ORIGINS = process.env.CORS_ALLOWED_ORIGINS ?? 'http://localhost:3000'
+
 export function createApi(
   monitor: HealthMonitor,
   data: KeeperDataSource,
@@ -45,7 +47,11 @@ export function createApi(
 ) {
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     res.setHeader('Content-Type', 'application/json')
-    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGINS)
+    res.setHeader('X-Content-Type-Options', 'nosniff')
+    res.setHeader('X-Frame-Options', 'DENY')
+    res.setHeader('X-XSS-Protection', '1; mode=block')
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
 
     const url = new URL(req.url ?? '/', `http://localhost:${port}`)
     const path = url.pathname
