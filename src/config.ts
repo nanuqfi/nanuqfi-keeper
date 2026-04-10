@@ -10,6 +10,8 @@ export interface KeeperConfig {
   aiBudgetPerDay: number
   alertTelegramToken?: string
   alertTelegramChatId?: string
+  /** Lulo API key — required for live Lulo yield rates. Falls back to hardcoded rate if absent. */
+  luloApiKey?: string
 }
 
 const MIN_CYCLE_INTERVAL_MS = 10_000 // 10 seconds — prevents tight polling loops
@@ -103,6 +105,7 @@ export function loadConfig(): KeeperConfig {
     aiBudgetPerDay: Number(process.env.AI_BUDGET_PER_DAY ?? 5),
     alertTelegramToken: process.env.TELEGRAM_BOT_TOKEN,
     alertTelegramChatId: process.env.TELEGRAM_CHAT_ID,
+    luloApiKey: process.env.LULO_API_KEY,
   }
   validateConfig(config)
   return config

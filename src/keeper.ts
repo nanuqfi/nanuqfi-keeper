@@ -424,7 +424,7 @@ export class Keeper {
 
     let luloRate = 0.07 // fallback
     try {
-      const luloApiKey = process.env.LULO_API_KEY
+      const luloApiKey = this.config.luloApiKey
       if (luloApiKey) {
         const luloRes = await fetch(
           'https://api.lulo.fi/v1/rates.getRates',

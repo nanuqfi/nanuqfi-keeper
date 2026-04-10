@@ -126,6 +126,18 @@ describe('validateConfig', () => {
     })
   })
 
+  describe('luloApiKey', () => {
+    it('accepts config with luloApiKey set', () => {
+      expect(() => validateConfig(validConfig({ luloApiKey: 'lulo-test-key' }))).not.toThrow()
+    })
+
+    it('accepts config with luloApiKey absent (optional field)', () => {
+      const cfg = validConfig()
+      delete (cfg as Partial<KeeperConfig>).luloApiKey
+      expect(() => validateConfig(cfg)).not.toThrow()
+    })
+  })
+
   describe('error message quality', () => {
     it('error message includes actionable info about env var to fix', () => {
       let message = ''
