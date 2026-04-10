@@ -155,4 +155,94 @@ describe('keeper rebalance awaiting', () => {
     expect(weights['moderate']).toEqual(originalWeights.moderate)
     expect(weights['aggressive']).toEqual(originalWeights.aggressive)
   })
+
+  it('decision never has undefined txStatus after runCycle in on-chain mode', async () => {
+    // On-chain mode always resolves to confirmed or failed — never left undefined
+    mockSubmitRebalance.mockResolvedValue({
+      success: true,
+      txSignature: 'sig-xyz',
+    })
+
+    await keeper.runCycle()
+
+    const decisions: KeeperDecision[] = keeper.getDecisions()
+    for (const d of decisions) {
+      expect(d.txStatus).toBeDefined()
+      expect(['confirmed', 'failed', 'pending']).toContain(d.txStatus)
+    }
+  })
+
+  it('restoreCurrentWeights skips failed decisions', () => {
+    const goodWeights = { 'kamino-lending': 5000, 'marginfi-lending': 3000, 'lulo-lending': 2000 }
+    const badWeights = { 'kamino-lending': 9000, 'marginfi-lending': 500, 'lulo-lending': 500 }
+
+    // Seed: confirmed decision first, then failed decision on top
+    ;(keeper as any).decisions = [
+      {
+        timestamp: Date.now() - 2000,
+        riskLevel: 'moderate',
+        proposal: { weights: goodWeights, scores: {} },
+        yieldData: { kaminoSupplyRate: 0.08, marginfiLendingRate: 0.065, luloRegularRate: 0.07 },
+        txStatus: 'confirmed',
+      },
+      {
+        timestamp: Date.now() - 1000,
+        riskLevel: 'moderate',
+        proposal: { weights: badWeights, scores: {} },
+        yieldData: { kaminoSupplyRate: 0.08, marginfiLendingRate: 0.065, luloRegularRate: 0.07 },
+        txStatus: 'failed',
+      },
+    ]
+
+    ;(keeper as any).restoreCurrentWeights()
+
+    // Must restore goodWeights (confirmed), not badWeights (failed)
+    expect((keeper as any).currentWeights['moderate']).toEqual(goodWeights)
+  })
+
+  it('restoreCurrentWeights skips pending decisions', () => {
+    const goodWeights = { 'kamino-lending': 4000, 'marginfi-lending': 3000, 'lulo-lending': 3000 }
+    const pendingWeights = { 'kamino-lending': 8000, 'marginfi-lending': 1000, 'lulo-lending': 1000 }
+
+    ;(keeper as any).decisions = [
+      {
+        timestamp: Date.now() - 2000,
+        riskLevel: 'aggressive',
+        proposal: { weights: goodWeights, scores: {} },
+        yieldData: { kaminoSupplyRate: 0.08, marginfiLendingRate: 0.065, luloRegularRate: 0.07 },
+        txStatus: 'confirmed',
+      },
+      {
+        timestamp: Date.now() - 1000,
+        riskLevel: 'aggressive',
+        proposal: { weights: pendingWeights, scores: {} },
+        yieldData: { kaminoSupplyRate: 0.08, marginfiLendingRate: 0.065, luloRegularRate: 0.07 },
+        txStatus: 'pending',
+      },
+    ]
+
+    ;(keeper as any).restoreCurrentWeights()
+
+    // Must restore goodWeights (confirmed), not pendingWeights (unknown outcome)
+    expect((keeper as any).currentWeights['aggressive']).toEqual(goodWeights)
+  })
+
+  it('restoreCurrentWeights accepts legacy decisions without txStatus (backward compat)', () => {
+    const legacyWeights = { 'kamino-lending': 6000, 'marginfi-lending': 2000, 'lulo-lending': 2000 }
+
+    ;(keeper as any).decisions = [
+      {
+        timestamp: Date.now() - 1000,
+        riskLevel: 'moderate',
+        proposal: { weights: legacyWeights, scores: {} },
+        yieldData: { kaminoSupplyRate: 0.08, marginfiLendingRate: 0.065, luloRegularRate: 0.07 },
+        // No txStatus — pre-fix legacy decision
+      },
+    ]
+
+    ;(keeper as any).restoreCurrentWeights()
+
+    // Legacy decisions (no txStatus) are treated as confirmed for backward compat
+    expect((keeper as any).currentWeights['moderate']).toEqual(legacyWeights)
+  })
 })

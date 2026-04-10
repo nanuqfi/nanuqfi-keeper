@@ -73,11 +73,20 @@ export class Keeper {
 
   private restoreCurrentWeights(): void {
     // Rebuild currentWeights from the most recent decision per vault
-    // so the first cycle has proper "previous weights" context
+    // so the first cycle has proper "previous weights" context.
+    // Skip 'pending' and 'failed' decisions — pending means the tx outcome is
+    // unknown (crash during submission), failed means the on-chain state never
+    // changed. Restoring either would give the keeper wrong "previous weights".
+    // Decisions without txStatus are pre-fix legacy entries — treat as confirmed
+    // for backward compatibility.
     for (const riskLevel of ['moderate', 'aggressive']) {
       const latest = [...this.decisions]
         .reverse()
-        .find(d => d.riskLevel === riskLevel)
+        .find(d => {
+          if (d.riskLevel !== riskLevel) return false
+          if (d.txStatus === 'failed' || d.txStatus === 'pending') return false
+          return true
+        })
       if (latest?.proposal?.weights) {
         this.currentWeights[riskLevel] = latest.proposal.weights
       }
@@ -319,13 +328,15 @@ export class Keeper {
           this.decisions = this.decisions.slice(-this.maxDecisionHistory)
         }
 
-        this.saveDecisionHistory()
-
         // Submit rebalance tx to on-chain allocator (if keypair configured).
         // Weights are only updated on confirmed tx — never optimistically.
         if (this.config.keeperKeypairPath && this.config.rpcUrls[0]) {
           const reasoning = this.getAIInsight()?.reasoning ?? 'Algorithm-only rebalance'
           const decision = this.decisions[this.decisions.length - 1]
+
+          // Mark 'pending' before await so the disk state is accurate if the
+          // process crashes mid-submission — 'pending' signals unknown outcome.
+          if (decision) decision.txStatus = 'pending'
 
           try {
             const result = await submitRebalance({
@@ -362,6 +373,11 @@ export class Keeper {
           // Algorithm-only mode — no on-chain tx, update weights directly
           this.currentWeights[riskLevel] = proposal.weights
         }
+
+        // Persist after tx result is known so txStatus ('pending'/'confirmed'/'failed')
+        // is accurately written to disk. The early-save race is intentional here:
+        // we save once per vault after its full tx lifecycle completes.
+        this.saveDecisionHistory()
       }
 
       // 5. Record success
