@@ -37,7 +37,8 @@ export async function scanDeFiYields(): Promise<MarketScan> {
   try {
     const llamaYields = await fetchDeFiLlamaYields()
     opportunities.push(...llamaYields)
-  } catch {
+  } catch (err) {
+    console.warn('[Scanner] DeFi Llama scan failed:', err)
     // DeFi Llama down — continue
   }
 

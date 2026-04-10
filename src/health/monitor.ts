@@ -39,7 +39,8 @@ export class HealthMonitor {
       this._cyclesFailed = stats.cyclesFailed ?? 0
       this._lastCycleTimestamp = stats.lastCycleTimestamp ?? 0
       console.log(`[Health] Restored stats: ${this._cyclesCompleted} completed, ${this._cyclesFailed} failed`)
-    } catch {
+    } catch (err) {
+      console.warn('[Health] Failed to load persisted stats:', err)
       // First boot or corrupted file — start fresh
     }
   }

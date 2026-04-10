@@ -180,7 +180,8 @@ export class Keeper {
       if (Array.isArray(parsed)) {
         this.aiHistory = parsed.slice(-AI_HISTORY_MAX)
       }
-    } catch {
+    } catch (err) {
+      console.warn('[Keeper] Failed to load AI history:', err)
       this.aiHistory = []
     }
   }
@@ -203,7 +204,8 @@ export class Keeper {
         this.decisions = parsed.slice(-this.maxDecisionHistory)
         console.log(`[Keeper] Loaded ${this.decisions.length} decisions from disk`)
       }
-    } catch {
+    } catch (err) {
+      console.warn('[Keeper] Failed to load decision history:', err)
       this.decisions = []
     }
   }
@@ -274,7 +276,7 @@ export class Keeper {
 
         // Alert on stress regime
         if (result.insight.regime === 'stress') {
-          this.alerter.alert(`⚠️ STRESS REGIME detected\n${result.insight.reasoning}`).catch(() => {})
+          this.alerter.alert(`⚠️ STRESS REGIME detected\n${result.insight.reasoning}`).catch(err => console.warn('[Alert] Send failed:', err instanceof Error ? err.message : err))
         }
       } else {
         console.warn(`[AI] Invalid response rejected: ${result.rejectionReason}`)
@@ -393,11 +395,11 @@ export class Keeper {
     } catch (error) {
       if (controller.signal.aborted) {
         this.monitor.recordCycleFailure('Cycle timeout (60s)')
-        this.alerter.alert('⏱️ Keeper cycle timed out (60s)').catch(() => {})
+        this.alerter.alert('⏱️ Keeper cycle timed out (60s)').catch(err => console.warn('[Alert] Send failed:', err instanceof Error ? err.message : err))
       } else {
         const msg = error instanceof Error ? error.message : 'Unknown error'
         this.monitor.recordCycleFailure(msg)
-        this.alerter.alert(`❌ Keeper cycle failed: ${msg}`).catch(() => {})
+        this.alerter.alert(`❌ Keeper cycle failed: ${msg}`).catch(err => console.warn('[Alert] Send failed:', err instanceof Error ? err.message : err))
       }
     } finally {
       clearTimeout(timeout)
@@ -415,8 +417,8 @@ export class Keeper {
         const usdc = data.find(r => r.liquidityToken === 'USDC')
         if (usdc) kaminoRate = Number(usdc.supplyApy)
       }
-    } catch {
-      // Use fallback rate
+    } catch (err) {
+      console.warn('[Kamino] Rate fetch failed, using fallback:', err)
     }
 
     let luloRate = 0.07 // fallback
@@ -434,8 +436,8 @@ export class Keeper {
           }
         }
       }
-    } catch {
-      // Use fallback rate
+    } catch (err) {
+      console.warn('[Lulo] Rate fetch failed, using fallback:', err)
     }
 
     return {
@@ -484,8 +486,8 @@ export class Keeper {
           this.monitor.setRpcStatus('healthy')
           return
         }
-      } catch {
-        // Try next RPC
+      } catch (err) {
+        console.warn('[RPC] Check failed for endpoint, trying next:', err)
       }
     }
     this.monitor.setRpcStatus('down')
