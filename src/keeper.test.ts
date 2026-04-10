@@ -116,6 +116,60 @@ describe('Keeper', () => {
     expect(yieldData!.luloRegularRate).toBe(0.07)
   })
 
+  it('triggers alerter when Kamino rate fetch returns non-OK response', async () => {
+    const alertSpy = vi.fn().mockResolvedValue(undefined)
+    const keeperWithSpy = new Keeper({
+      config: mockConfig,
+      monitor: new HealthMonitor(),
+    })
+    // Inject spy alerter via a cast (alerter is private)
+    ;(keeperWithSpy as unknown as { alerter: { alert: typeof alertSpy } }).alerter = { alert: alertSpy }
+
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('kamino')) {
+        return Promise.resolve({ ok: false, status: 503, json: async () => ({}) })
+      }
+      if (typeof url === 'string' && url.includes('llama.fi')) {
+        return Promise.resolve({ ok: true, json: async () => ({ status: 'success', data: [] }) })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
+
+    await keeperWithSpy.runCycle()
+
+    // Alerter should have been called at least once for the Kamino fallback
+    const alertMessages = alertSpy.mock.calls.map((c: unknown[]) => String(c[0]))
+    expect(alertMessages.some(m => m.includes('Kamino') || m.includes('fallback'))).toBe(true)
+
+    keeperWithSpy.stop()
+  })
+
+  it('triggers alerter when Lulo rate fetch fails', async () => {
+    const alertSpy = vi.fn().mockResolvedValue(undefined)
+    const keeperWithSpy = new Keeper({
+      config: { ...mockConfig, luloApiKey: 'test-key' },
+      monitor: new HealthMonitor(),
+    })
+    ;(keeperWithSpy as unknown as { alerter: { alert: typeof alertSpy } }).alerter = { alert: alertSpy }
+
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('lulo.fi')) {
+        return Promise.reject(new Error('Lulo API down'))
+      }
+      if (typeof url === 'string' && url.includes('llama.fi')) {
+        return Promise.resolve({ ok: true, json: async () => ({ status: 'success', data: [] }) })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
+
+    await keeperWithSpy.runCycle()
+
+    const alertMessages = alertSpy.mock.calls.map((c: unknown[]) => String(c[0]))
+    expect(alertMessages.some(m => m.includes('Lulo') || m.includes('fallback'))).toBe(true)
+
+    keeperWithSpy.stop()
+  })
+
   it('records decisions with timestamps', async () => {
     mockFetchForCycle()
     const before = Date.now()

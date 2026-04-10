@@ -425,6 +425,7 @@ export class Keeper {
 
   private async fetchYieldData(signal?: AbortSignal): Promise<YieldData> {
     let kaminoRate = 0.021 // fallback
+    let kaminoUsedFallback = true
     try {
       const res = await fetch(
         'https://api.kamino.finance/kamino-market/7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfF/reserves/metrics',
@@ -433,13 +434,27 @@ export class Keeper {
       if (res.ok) {
         const data = await res.json() as { liquidityToken: string; supplyApy: string }[]
         const usdc = data.find(r => r.liquidityToken === 'USDC')
-        if (usdc) kaminoRate = Number(usdc.supplyApy)
+        if (usdc) {
+          kaminoRate = Number(usdc.supplyApy)
+          kaminoUsedFallback = false
+        }
       }
     } catch (err) {
-      console.warn('[Kamino] Rate fetch failed, using fallback:', err)
+      logger.warn('Kamino', 'Rate fetch failed, using fallback rate', {
+        fallbackRate: kaminoRate,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
+
+    if (kaminoUsedFallback) {
+      this.alerter.alert(
+        `⚠️ Kamino rate fetch failed — running on stale fallback rate (${(kaminoRate * 100).toFixed(2)}%). ` +
+        `Rebalance decisions may be suboptimal.`
+      ).catch(e => logger.warn('Alert', 'Fallback alert send failed', { error: e instanceof Error ? e.message : String(e) }))
     }
 
     let luloRate = 0.07 // fallback
+    let luloUsedFallback = true
     try {
       const luloApiKey = this.config.luloApiKey
       if (luloApiKey) {
@@ -451,16 +466,52 @@ export class Keeper {
           const luloData = await luloRes.json() as { regular?: { CURRENT?: number } }
           if (luloData.regular?.CURRENT) {
             luloRate = luloData.regular.CURRENT / 100 // percentage → decimal
+            luloUsedFallback = false
           }
         }
+      } else {
+        // No API key configured — not a fetch failure, just unconfigured
+        logger.warn('Lulo', 'LULO_API_KEY not set, using fallback rate', { fallbackRate: luloRate })
+        luloUsedFallback = false // suppress alert — this is a config issue, not a transient failure
       }
     } catch (err) {
-      console.warn('[Lulo] Rate fetch failed, using fallback:', err)
+      logger.warn('Lulo', 'Rate fetch failed, using fallback rate', {
+        fallbackRate: luloRate,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
+
+    if (luloUsedFallback) {
+      this.alerter.alert(
+        `⚠️ Lulo rate fetch failed — running on stale fallback rate (${(luloRate * 100).toFixed(2)}%). ` +
+        `Rebalance decisions may be suboptimal.`
+      ).catch(e => logger.warn('Alert', 'Fallback alert send failed', { error: e instanceof Error ? e.message : String(e) }))
+    }
+
+    let marginfiRate: number
+    let marginfiUsedFallback = false
+    try {
+      marginfiRate = await fetchMarginfiRate(signal)
+    } catch (err) {
+      const MARGINFI_FALLBACK = 0.065
+      marginfiRate = MARGINFI_FALLBACK
+      marginfiUsedFallback = true
+      logger.warn('Marginfi', 'Rate fetch failed, using fallback rate', {
+        fallbackRate: MARGINFI_FALLBACK,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
+
+    if (marginfiUsedFallback) {
+      this.alerter.alert(
+        `⚠️ Marginfi rate fetch failed — running on stale fallback rate (${(marginfiRate * 100).toFixed(2)}%). ` +
+        `Rebalance decisions may be suboptimal.`
+      ).catch(e => logger.warn('Alert', 'Fallback alert send failed', { error: e instanceof Error ? e.message : String(e) }))
     }
 
     return {
       kaminoSupplyRate: kaminoRate,
-      marginfiLendingRate: await fetchMarginfiRate(signal),
+      marginfiLendingRate: marginfiRate,
       luloRegularRate: luloRate,
     }
   }
