@@ -6,7 +6,10 @@ import type { AIProvider } from './ai/index'
 
 const mockConfig: KeeperConfig = {
   rpcUrls: ['http://localhost:8899'],
-  keeperKeypairPath: '/tmp/test-keypair.json',
+  // Empty keypair path = algorithm-only mode (no on-chain tx).
+  // Tests in this file cover the algorithm/data pipeline, not on-chain submission.
+  // On-chain submission behavior is tested in src/__tests__/keeper-rebalance.test.ts.
+  keeperKeypairPath: '',
   cycleIntervalMs: 100,
   aiCycleIntervalMs: 1000,
   aiApiKey: 'test-key',

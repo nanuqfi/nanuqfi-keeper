@@ -26,6 +26,7 @@ export interface KeeperDecision {
   yieldData: YieldData
   aiInsight?: AIInsight
   txSignature?: string
+  txStatus?: 'pending' | 'confirmed' | 'failed'
 }
 
 export interface KeeperDeps {
@@ -313,9 +314,6 @@ export class Keeper {
           aiInsight: this.getAIInsight() ?? undefined,
         })
 
-        // Update current weights
-        this.currentWeights[riskLevel] = proposal.weights
-
         // Cap decision history to prevent unbounded memory growth
         if (this.decisions.length > this.maxDecisionHistory) {
           this.decisions = this.decisions.slice(-this.maxDecisionHistory)
@@ -323,32 +321,46 @@ export class Keeper {
 
         this.saveDecisionHistory()
 
-        // Submit rebalance tx to on-chain allocator (if keypair configured)
+        // Submit rebalance tx to on-chain allocator (if keypair configured).
+        // Weights are only updated on confirmed tx — never optimistically.
         if (this.config.keeperKeypairPath && this.config.rpcUrls[0]) {
           const reasoning = this.getAIInsight()?.reasoning ?? 'Algorithm-only rebalance'
-          submitRebalance({
-            rpcUrl: this.config.rpcUrls[0],
-            keypairPath: this.config.keeperKeypairPath,
-            riskLevel,
-            weights: proposal.weights,
-            reasoning,
-            rebalanceCounter: this.decisions.length,
-            equitySnapshot: 0n,
-            vaultUsdcAddress: new (await import('@solana/web3.js')).PublicKey('11111111111111111111111111111111'),
-            treasuryUsdcAddress: new (await import('@solana/web3.js')).PublicKey('11111111111111111111111111111111'),
-          }).then(result => {
+          const decision = this.decisions[this.decisions.length - 1]
+
+          try {
+            const result = await submitRebalance({
+              rpcUrl: this.config.rpcUrls[0],
+              keypairPath: this.config.keeperKeypairPath,
+              riskLevel,
+              weights: proposal.weights,
+              reasoning,
+              rebalanceCounter: this.decisions.length,
+              equitySnapshot: 0n,
+              vaultUsdcAddress: new (await import('@solana/web3.js')).PublicKey('11111111111111111111111111111111'),
+              treasuryUsdcAddress: new (await import('@solana/web3.js')).PublicKey('11111111111111111111111111111111'),
+            })
+
             if (result.success) {
-              console.log(`[Chain] Rebalance tx submitted: ${result.txSignature}`)
-              // Store tx in the latest decision
-              const lastDecision = this.decisions[this.decisions.length - 1]
-              if (lastDecision) lastDecision.txSignature = result.txSignature
+              if (decision) {
+                decision.txSignature = result.txSignature
+                decision.txStatus = 'confirmed'
+              }
+              this.currentWeights[riskLevel] = proposal.weights
+              console.log(`[Chain] Rebalance tx confirmed: ${result.txSignature}`)
             } else {
-              console.warn(`[Chain] Rebalance tx failed: ${result.error}`)
-              this.alerter.alert(`❌ On-chain rebalance failed: ${result.error}`).catch(() => {})
+              if (decision) decision.txStatus = 'failed'
+              console.error(`[Chain] Rebalance tx failed for ${riskLevel}: ${result.error}`)
+              await this.alerter.alert(`❌ On-chain rebalance failed for ${riskLevel}: ${result.error}`)
             }
-          }).catch(err => {
-            console.warn(`[Chain] Rebalance submission error: ${err instanceof Error ? err.message : err}`)
-          })
+          } catch (err) {
+            if (decision) decision.txStatus = 'failed'
+            const msg = err instanceof Error ? err.message : String(err)
+            console.error(`[Chain] Rebalance submission error for ${riskLevel}: ${msg}`)
+            await this.alerter.alert(`❌ On-chain rebalance error for ${riskLevel}: ${msg}`)
+          }
+        } else {
+          // Algorithm-only mode — no on-chain tx, update weights directly
+          this.currentWeights[riskLevel] = proposal.weights
         }
       }
 
