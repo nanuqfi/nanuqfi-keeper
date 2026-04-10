@@ -26,6 +26,7 @@ export interface KeeperDecision {
   yieldData: YieldData
   aiInsight?: AIInsight
   txSignature?: string
+  txStatus?: 'pending' | 'confirmed' | 'failed'
 }
 
 export interface KeeperDeps {
@@ -72,11 +73,20 @@ export class Keeper {
 
   private restoreCurrentWeights(): void {
     // Rebuild currentWeights from the most recent decision per vault
-    // so the first cycle has proper "previous weights" context
+    // so the first cycle has proper "previous weights" context.
+    // Skip 'pending' and 'failed' decisions — pending means the tx outcome is
+    // unknown (crash during submission), failed means the on-chain state never
+    // changed. Restoring either would give the keeper wrong "previous weights".
+    // Decisions without txStatus are pre-fix legacy entries — treat as confirmed
+    // for backward compatibility.
     for (const riskLevel of ['moderate', 'aggressive']) {
       const latest = [...this.decisions]
         .reverse()
-        .find(d => d.riskLevel === riskLevel)
+        .find(d => {
+          if (d.riskLevel !== riskLevel) return false
+          if (d.txStatus === 'failed' || d.txStatus === 'pending') return false
+          return true
+        })
       if (latest?.proposal?.weights) {
         this.currentWeights[riskLevel] = latest.proposal.weights
       }
@@ -313,43 +323,61 @@ export class Keeper {
           aiInsight: this.getAIInsight() ?? undefined,
         })
 
-        // Update current weights
-        this.currentWeights[riskLevel] = proposal.weights
-
         // Cap decision history to prevent unbounded memory growth
         if (this.decisions.length > this.maxDecisionHistory) {
           this.decisions = this.decisions.slice(-this.maxDecisionHistory)
         }
 
-        this.saveDecisionHistory()
-
-        // Submit rebalance tx to on-chain allocator (if keypair configured)
+        // Submit rebalance tx to on-chain allocator (if keypair configured).
+        // Weights are only updated on confirmed tx — never optimistically.
         if (this.config.keeperKeypairPath && this.config.rpcUrls[0]) {
           const reasoning = this.getAIInsight()?.reasoning ?? 'Algorithm-only rebalance'
-          submitRebalance({
-            rpcUrl: this.config.rpcUrls[0],
-            keypairPath: this.config.keeperKeypairPath,
-            riskLevel,
-            weights: proposal.weights,
-            reasoning,
-            rebalanceCounter: this.decisions.length,
-            equitySnapshot: 0n,
-            vaultUsdcAddress: new (await import('@solana/web3.js')).PublicKey('11111111111111111111111111111111'),
-            treasuryUsdcAddress: new (await import('@solana/web3.js')).PublicKey('11111111111111111111111111111111'),
-          }).then(result => {
+          const decision = this.decisions[this.decisions.length - 1]
+
+          // Mark 'pending' before await so the disk state is accurate if the
+          // process crashes mid-submission — 'pending' signals unknown outcome.
+          if (decision) decision.txStatus = 'pending'
+
+          try {
+            const result = await submitRebalance({
+              rpcUrl: this.config.rpcUrls[0],
+              keypairPath: this.config.keeperKeypairPath,
+              riskLevel,
+              weights: proposal.weights,
+              reasoning,
+              rebalanceCounter: this.decisions.length,
+              equitySnapshot: 0n,
+              vaultUsdcAddress: new (await import('@solana/web3.js')).PublicKey('11111111111111111111111111111111'),
+              treasuryUsdcAddress: new (await import('@solana/web3.js')).PublicKey('11111111111111111111111111111111'),
+            })
+
             if (result.success) {
-              console.log(`[Chain] Rebalance tx submitted: ${result.txSignature}`)
-              // Store tx in the latest decision
-              const lastDecision = this.decisions[this.decisions.length - 1]
-              if (lastDecision) lastDecision.txSignature = result.txSignature
+              if (decision) {
+                decision.txSignature = result.txSignature
+                decision.txStatus = 'confirmed'
+              }
+              this.currentWeights[riskLevel] = proposal.weights
+              console.log(`[Chain] Rebalance tx confirmed: ${result.txSignature}`)
             } else {
-              console.warn(`[Chain] Rebalance tx failed: ${result.error}`)
-              this.alerter.alert(`❌ On-chain rebalance failed: ${result.error}`).catch(() => {})
+              if (decision) decision.txStatus = 'failed'
+              console.error(`[Chain] Rebalance tx failed for ${riskLevel}: ${result.error}`)
+              await this.alerter.alert(`❌ On-chain rebalance failed for ${riskLevel}: ${result.error}`)
             }
-          }).catch(err => {
-            console.warn(`[Chain] Rebalance submission error: ${err instanceof Error ? err.message : err}`)
-          })
+          } catch (err) {
+            if (decision) decision.txStatus = 'failed'
+            const msg = err instanceof Error ? err.message : String(err)
+            console.error(`[Chain] Rebalance submission error for ${riskLevel}: ${msg}`)
+            await this.alerter.alert(`❌ On-chain rebalance error for ${riskLevel}: ${msg}`)
+          }
+        } else {
+          // Algorithm-only mode — no on-chain tx, update weights directly
+          this.currentWeights[riskLevel] = proposal.weights
         }
+
+        // Persist after tx result is known so txStatus ('pending'/'confirmed'/'failed')
+        // is accurately written to disk. The early-save race is intentional here:
+        // we save once per vault after its full tx lifecycle completes.
+        this.saveDecisionHistory()
       }
 
       // 5. Record success
