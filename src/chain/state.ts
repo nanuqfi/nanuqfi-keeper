@@ -101,9 +101,7 @@ export async function fetchRebalanceChainState(
 
   // usdc_token_account: Pubkey (32 bytes) at offset 41
   const treasuryUsdcAddress = new PublicKey(
-    riskVaultInfo.data.length > 0
-      ? treasuryInfo.data.subarray(TREASURY_USDC_ACCOUNT_OFFSET, TREASURY_USDC_ACCOUNT_OFFSET + 32)
-      : Buffer.alloc(32),
+    treasuryInfo.data.subarray(TREASURY_USDC_ACCOUNT_OFFSET, TREASURY_USDC_ACCOUNT_OFFSET + 32),
   )
 
   // Vault USDC ATA: deterministic from allocator PDA + USDC mint
