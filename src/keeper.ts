@@ -276,7 +276,7 @@ export class Keeper {
 
         // Alert on stress regime
         if (result.insight.regime === 'stress') {
-          this.alerter.alert(`⚠️ STRESS REGIME detected\n${result.insight.reasoning}`).catch(() => {})
+          this.alerter.alert(`⚠️ STRESS REGIME detected\n${result.insight.reasoning}`).catch(err => console.warn('[Alert] Send failed:', err instanceof Error ? err.message : err))
         }
       } else {
         console.warn(`[AI] Invalid response rejected: ${result.rejectionReason}`)
@@ -395,11 +395,11 @@ export class Keeper {
     } catch (error) {
       if (controller.signal.aborted) {
         this.monitor.recordCycleFailure('Cycle timeout (60s)')
-        this.alerter.alert('⏱️ Keeper cycle timed out (60s)').catch(() => {})
+        this.alerter.alert('⏱️ Keeper cycle timed out (60s)').catch(err => console.warn('[Alert] Send failed:', err instanceof Error ? err.message : err))
       } else {
         const msg = error instanceof Error ? error.message : 'Unknown error'
         this.monitor.recordCycleFailure(msg)
-        this.alerter.alert(`❌ Keeper cycle failed: ${msg}`).catch(() => {})
+        this.alerter.alert(`❌ Keeper cycle failed: ${msg}`).catch(err => console.warn('[Alert] Send failed:', err instanceof Error ? err.message : err))
       }
     } finally {
       clearTimeout(timeout)
