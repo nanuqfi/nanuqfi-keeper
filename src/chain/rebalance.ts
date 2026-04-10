@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { readFileSync, existsSync } from 'node:fs'
+import { logger } from '../logger.js'
 import {
   Connection,
   Keypair,
@@ -153,7 +154,7 @@ export async function submitRebalance(params: RebalanceParams): Promise<Rebalanc
     const keeper = Keypair.fromSecretKey(new Uint8Array(keypairData))
 
     // Log loaded public key so operators can verify identity at a glance
-    console.log(`[Chain] Keeper public key: ${keeper.publicKey.toBase58()}`)
+    logger.info('Chain', 'Keeper keypair loaded', { pubkey: keeper.publicKey.toBase58() })
 
     // Guard: verify loaded key matches the expected authority if provided
     if (params.expectedAuthority && keeper.publicKey.toBase58() !== params.expectedAuthority) {

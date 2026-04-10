@@ -10,6 +10,7 @@ import { AIProvider, buildInsightPrompt, validateAIInsight, type AIInsight, type
 import { runBacktest, fetchHistoricalData, DEFAULT_CONFIG } from './backtest/index.js'
 import type { BacktestResult } from './backtest/index.js'
 import { fetchMarginfiRate } from './rates/marginfi.js'
+import { logger } from './logger.js'
 
 const AI_HISTORY_PATH = process.env.AI_HISTORY_PATH ?? '/data/ai-history.json'
 const AI_HISTORY_MAX = 500
@@ -287,14 +288,23 @@ export class Keeper {
   }
 
   async runCycle(): Promise<void> {
+    const cycleStart = Date.now()
     const cycleTimeout = 60_000
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), cycleTimeout)
+
+    logger.info('Cycle', 'Starting keeper cycle')
 
     try {
       // 1. Fetch real yield data — pass cycle signal so fetches abort on timeout
       const yieldData = await this.fetchYieldData(controller.signal)
       this.latestYieldData = yieldData
+
+      logger.info('Cycle', 'Yield data fetched', {
+        kaminoApy: yieldData.kaminoSupplyRate,
+        marginfiApy: yieldData.marginfiLendingRate,
+        luloApy: yieldData.luloRegularRate,
+      })
 
       // 2. Scan DeFi yields BEFORE proposing — feeds opportunity cost into scoring
       const marketScan = await scanDeFiYields(controller.signal)
@@ -366,16 +376,20 @@ export class Keeper {
                 decision.txStatus = 'confirmed'
               }
               this.currentWeights[riskLevel] = proposal.weights
-              console.log(`[Chain] Rebalance tx confirmed: ${result.txSignature}`)
+              logger.info('Chain', 'Rebalance tx confirmed', {
+                riskLevel,
+                txSignature: result.txSignature,
+                weights: proposal.weights,
+              })
             } else {
               if (decision) decision.txStatus = 'failed'
-              console.error(`[Chain] Rebalance tx failed for ${riskLevel}: ${result.error}`)
+              logger.error('Chain', `Rebalance tx failed for ${riskLevel}`, { error: result.error, riskLevel })
               await this.alerter.alert(`❌ On-chain rebalance failed for ${riskLevel}: ${result.error}`)
             }
           } catch (err) {
             if (decision) decision.txStatus = 'failed'
             const msg = err instanceof Error ? err.message : String(err)
-            console.error(`[Chain] Rebalance submission error for ${riskLevel}: ${msg}`)
+            logger.error('Chain', `Rebalance submission error for ${riskLevel}`, { error: msg, riskLevel })
             await this.alerter.alert(`❌ On-chain rebalance error for ${riskLevel}: ${msg}`)
           }
         } else {
@@ -391,14 +405,17 @@ export class Keeper {
 
       // 5. Record success
       this.monitor.recordCycleSuccess()
+      logger.info('Cycle', 'Keeper cycle completed', { durationMs: Date.now() - cycleStart })
 
     } catch (error) {
       if (controller.signal.aborted) {
         this.monitor.recordCycleFailure('Cycle timeout (60s)')
+        logger.error('Cycle', 'Keeper cycle timed out', { timeoutMs: cycleTimeout })
         this.alerter.alert('⏱️ Keeper cycle timed out (60s)').catch(err => console.warn('[Alert] Send failed:', err instanceof Error ? err.message : err))
       } else {
         const msg = error instanceof Error ? error.message : 'Unknown error'
         this.monitor.recordCycleFailure(msg)
+        logger.error('Cycle', 'Keeper cycle failed', { error: msg })
         this.alerter.alert(`❌ Keeper cycle failed: ${msg}`).catch(err => console.warn('[Alert] Send failed:', err instanceof Error ? err.message : err))
       }
     } finally {
