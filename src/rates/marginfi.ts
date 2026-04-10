@@ -25,11 +25,14 @@ interface DefiLlamaResponse {
   data?: DefiLlamaPool[]
 }
 
-export async function fetchMarginfiRate(): Promise<number> {
+export async function fetchMarginfiRate(parentSignal?: AbortSignal): Promise<number> {
   try {
-    const res = await fetch(DEFI_LLAMA_POOLS_URL, {
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    })
+    const timeoutSignal = AbortSignal.timeout(TIMEOUT_MS)
+    // Compose: abort on timeout OR on parent abort (e.g. cycle timeout)
+    const signal = parentSignal
+      ? AbortSignal.any([timeoutSignal, parentSignal])
+      : timeoutSignal
+    const res = await fetch(DEFI_LLAMA_POOLS_URL, { signal })
 
     if (!res.ok) {
       console.warn(`[Marginfi] DeFi Llama API returned ${res.status}, using fallback`)

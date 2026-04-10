@@ -110,6 +110,17 @@ export interface InsightValidationResult {
   rejectionReason?: string
 }
 
+/**
+ * Canonical backend names — must match DEFAULT_BACKEND_ORDER in chain/rebalance.ts.
+ * Any AI response referencing strategy names outside this set is rejected to
+ * prevent the keeper from acting on hallucinated or mistyped backend names.
+ */
+export const KNOWN_BACKEND_NAMES = new Set([
+  'kamino-lending',
+  'marginfi-lending',
+  'lulo-lending',
+])
+
 export function validateAIInsight(raw: string): InsightValidationResult {
   let parsed: unknown
   try {
@@ -140,6 +151,13 @@ export function validateAIInsight(raw: string): InsightValidationResult {
     }
     if (val < 0 || val > 1) {
       return { valid: false, rejectionReason: `Strategy "${key}" confidence must be 0.0–1.0, got ${val}` }
+    }
+    // Reject unknown backend names — prevents keeper from acting on hallucinated strategies
+    if (!KNOWN_BACKEND_NAMES.has(key)) {
+      return {
+        valid: false,
+        rejectionReason: `Strategy "${key}" is not a known backend — expected one of: ${[...KNOWN_BACKEND_NAMES].join(', ')}`,
+      }
     }
   }
 

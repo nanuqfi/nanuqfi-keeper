@@ -13,10 +13,15 @@ services:
       - /home/nanuqfi/secrets/keeper-wallet.json:/run/secrets/keeper-wallet:ro
       - keeper-data:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/v1/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
       interval: 60s
       timeout: 10s
       retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
     environment:
       - AI_HISTORY_PATH=/data/ai-history.json
       - DECISION_HISTORY_PATH=/data/decision-history.json
