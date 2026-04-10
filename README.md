@@ -2,7 +2,7 @@
 
 <img src="assets/header.svg" alt="NanuqFi Keeper — AI-Powered Yield Strategy Engine" width="800"/>
 
-[![Tests](https://img.shields.io/badge/tests-206%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-322%20passing-brightgreen)]()
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)]()
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED)]()
 [![Node](https://img.shields.io/badge/node-%3E%3D22-339933)]()
@@ -86,6 +86,20 @@ The keeper exposes a REST API for the dashboard and monitoring:
 | `/v1/ai` | GET | Latest AI insight (regime, confidence, risk flag) |
 | `/v1/ai/history` | GET | AI reasoning history with `?limit=N` (max 100) |
 | `/v1/backtest` | GET | Historical simulation results (CAGR, Sharpe, Sortino, drawdown) |
+| `/v1/metrics` | GET | Structured metrics -- uptime, weights, failure rate, AI status |
+
+## Operational Hardening
+
+- **Graceful shutdown** -- SIGINT/SIGTERM handlers with 5s grace period for clean Docker stops
+- **Config validation** -- fail-fast on invalid configuration (NaN intervals, missing RPCs)
+- **API security** -- rate limiting (60 req/min), security headers, CORS restriction
+- **Alert throttling** -- 5-minute dedup window prevents Telegram floods
+- **Structured logging** -- JSON log format for production observability
+- **AbortController** -- all fetch calls wired to cycle timeout signal
+- **Keypair validation** -- verifies file exists and pubkey matches before signing
+- **AI response validation** -- rejects hallucinated strategy names not in known backends
+- **Fallback alerting** -- operators notified when live rates fall back to defaults
+- **322 tests** covering algorithm engine, AI validation, chain state, config, alerts, backtest
 
 ## Quick Start
 
@@ -131,7 +145,7 @@ cp .env.example .env
 
 ## Tests
 
-206 tests across 13 test files. All unit tests run offline with mocked dependencies -- zero network calls.
+322 tests across 13 test files. All unit tests run offline with mocked dependencies -- zero network calls.
 
 ```
  src/ai/response-validator.test.ts    41 tests   AI response validation + hallucination rejection
@@ -150,7 +164,7 @@ cp .env.example .env
 ```
 
 ```bash
-pnpm test            # run all 206 tests
+pnpm test            # run all 322 tests
 pnpm test:watch      # watch mode
 ```
 
