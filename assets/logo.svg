@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">
+  <!-- NanuqFi Logo — Geometric Polar Bear (Nanuq) -->
+  <!-- Brand: sky blue (#0ea5e9), dark navy (#0c4a6e), white -->
+
+  <!-- Rounded square background -->
+  <rect width="256" height="256" rx="48" fill="#0ea5e9"/>
+
+  <!-- Bear head silhouette (faceted geometry) -->
+  <path d="M100 69 L156 69 L176 69 L186 89 L176 109 L196 139 L160 209 L128 219 L96 209 L60 139 L80 109 L70 89 L80 69 Z" fill="#ffffff"/>
+
+  <!-- Left eye (geometric triangle) -->
+  <path d="M80 130 L110 133 L105 121 Z" fill="#0c4a6e"/>
+
+  <!-- Right eye (geometric triangle) -->
+  <path d="M176 130 L146 133 L151 121 Z" fill="#0c4a6e"/>
+
+  <!-- Nose (pentagon) -->
+  <path d="M116 181 L140 181 L148 193 L128 205 L108 193 Z" fill="#0c4a6e"/>
+</svg>
