@@ -1,13 +1,13 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from 'vitest'
 import { log, logger, type LogLevel } from './logger.js'
 
 describe('log', () => {
-  let stdoutSpy: ReturnType<typeof vi.spyOn>
-  let stderrSpy: ReturnType<typeof vi.spyOn>
+  let stdoutSpy: MockInstance<(...args: unknown[]) => unknown>
+  let stderrSpy: MockInstance<(...args: unknown[]) => unknown>
 
   beforeEach(() => {
-    stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
-    stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true) as unknown as MockInstance<(...args: unknown[]) => unknown>
+    stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true) as unknown as MockInstance<(...args: unknown[]) => unknown>
   })
 
   afterEach(() => {
@@ -80,12 +80,12 @@ describe('log', () => {
 })
 
 describe('logger convenience wrappers', () => {
-  let stdoutSpy: ReturnType<typeof vi.spyOn>
-  let stderrSpy: ReturnType<typeof vi.spyOn>
+  let stdoutSpy: MockInstance<(...args: unknown[]) => unknown>
+  let stderrSpy: MockInstance<(...args: unknown[]) => unknown>
 
   beforeEach(() => {
-    stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
-    stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true) as unknown as MockInstance<(...args: unknown[]) => unknown>
+    stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true) as unknown as MockInstance<(...args: unknown[]) => unknown>
   })
 
   afterEach(() => {

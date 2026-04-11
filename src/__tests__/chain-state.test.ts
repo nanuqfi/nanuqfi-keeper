@@ -26,9 +26,7 @@ function getMockConnection() {
   // Vitest's module mock replaces Connection with a factory; calling new Connection()
   // returns the mock object we defined above via __mockConnection.
   const mod = vi.mocked(Connection) as unknown as { __mockConnection: ReturnType<typeof vi.fn> }
-  // Access via the module internals exposed in the mock
-  return (vi.getMockContext()?.['@solana/web3.js'] as any)?.__mockConnection
-    ?? (mod as any).__mockConnection
+  return (mod as any).__mockConnection
 }
 
 // ─── Byte-level RiskVault builder ────────────────────────────────────────────
