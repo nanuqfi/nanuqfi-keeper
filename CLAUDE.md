@@ -11,12 +11,12 @@
 
 **Tech Stack:** TypeScript, Vitest, Anthropic SDK, Node.js 22+
 **Deployment:** Docker → VPS
-**Tests:** 206 passing across 13 test files
+**Tests:** 322 passing across 13 test files
 **Deploy:** VPS reclabs3, port 9000, keeper.nanuqfi.com
 
 **Key Commands:**
 ```bash
-pnpm test                       # run all 206 tests
+pnpm test                       # run all 322 tests
 pnpm build                      # compile TypeScript
 pnpm dev                        # run with tsx
 docker build -t nanuqfi-keeper . # Docker build
@@ -41,7 +41,10 @@ docker build -t nanuqfi-keeper . # Docker build
 | `src/alerts/telegram.ts` | Telegram Bot API alerting (failures, stress regime) |
 | `src/alerts/index.ts` | Alerter factory (Telegram or no-op fallback) |
 | `src/chain/rebalance.ts` | On-chain rebalance tx submission (PDA derivation, Anchor IX) |
+| `src/chain/state.ts` | On-chain account state reader (allocator, vault, position PDAs) |
 | `src/scanner/yield-scanner.ts` | Multi-protocol DeFi yield scanner (DeFi Llama) |
+| `src/rates/marginfi.ts` | Live DeFi Llama rate fetcher for MarginFi historical APY |
+| `src/logger.ts` | Structured JSON logging (timestamps, levels, context fields) |
 | `src/backtest/engine.ts` | Historical simulation engine — day-by-day scoring across protocols |
 | `src/backtest/data-loader.ts` | Fetches 21K+ Kamino historical data points for backtesting |
 | `src/backtest/metrics.ts` | CAGR, Sharpe, Sortino, max drawdown, volatility computation |
@@ -88,6 +91,7 @@ Lending backends (kamino, marginfi, lulo) have no automatic exit triggers by des
 | `/v1/ai` | Latest AI reasoning |
 | `/v1/ai/history` | AI reasoning history |
 | `/v1/backtest` | Historical simulation results (CAGR, Sharpe, drawdown) |
+| `/v1/metrics` | Keeper performance metrics (cycle count, success rate, uptime) |
 
 ---
 
@@ -113,4 +117,4 @@ See `.env.example` for all required variables. Secrets go in `~/Documents/secret
 
 ---
 
-**Last Updated:** 2026-04-06
+**Last Updated:** 2026-04-10
