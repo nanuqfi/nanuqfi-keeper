@@ -187,8 +187,7 @@ The keeper runs as a Docker container on VPS, accessible at `keeper.nanuqfi.com`
 | Repository | Purpose |
 |---|---|
 | [nanuqfi](https://github.com/nanuqfi/nanuqfi) | Core monorepo -- SDK packages + Anchor allocator program (27 instructions) |
-| [nanuqfi-app](https://github.com/nanuqfi/nanuqfi-app) | Frontend dashboard -- transparency UI at app.nanuqfi.com |
-| [nanuqfi-web](https://github.com/nanuqfi/nanuqfi-web) | Marketing site at nanuqfi.com |
+| [nanuqfi-app](https://github.com/nanuqfi/nanuqfi-app) | Frontend -- marketing + dashboard + vault management at nanuqfi.com |
 
 ---
 
