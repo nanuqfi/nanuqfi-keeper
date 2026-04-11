@@ -104,9 +104,26 @@ export class Keeper {
     this.running = true
     await this.boot()
     await this.runCycle()
-    await this.runAICycle()
+
+    // Only run AI cycle on boot if enough time has passed since last one.
+    // Prevents wasteful API calls on every deploy/restart.
+    const lastAITimestamp = this.aiHistory.length > 0
+      ? this.aiHistory[this.aiHistory.length - 1]!.timestamp
+      : 0
+    const timeSinceLastAI = Date.now() - lastAITimestamp
+    if (timeSinceLastAI >= this.config.aiCycleIntervalMs) {
+      await this.runAICycle()
+      this.scheduleNextAICycle()
+    } else {
+      const remaining = this.config.aiCycleIntervalMs - timeSinceLastAI
+      console.log(`[AI] Skipping boot cycle — last ran ${Math.round(timeSinceLastAI / 60_000)}m ago, next in ${Math.round(remaining / 60_000)}m`)
+      this.aiCycleTimer = setTimeout(async () => {
+        await this.runAICycle()
+        this.scheduleNextAICycle()
+      }, remaining)
+    }
+
     this.scheduleNextCycle()
-    this.scheduleNextAICycle()
   }
 
   stop(): void {
