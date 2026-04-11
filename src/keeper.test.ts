@@ -176,10 +176,11 @@ describe('Keeper', () => {
     await keeper.runCycle()
 
     const decisions = keeper.getDecisions()
-    // 2 decisions per cycle: moderate + aggressive
-    expect(decisions).toHaveLength(2)
-    expect(decisions[0]!.riskLevel).toBe('moderate')
-    expect(decisions[1]!.riskLevel).toBe('aggressive')
+    // 3 decisions per cycle: conservative + moderate + aggressive
+    expect(decisions).toHaveLength(3)
+    expect(decisions[0]!.riskLevel).toBe('conservative')
+    expect(decisions[1]!.riskLevel).toBe('moderate')
+    expect(decisions[2]!.riskLevel).toBe('aggressive')
     expect(decisions[0]!.timestamp).toBeGreaterThanOrEqual(before)
     expect(decisions[0]!.proposal.weights).toBeDefined()
     expect(decisions[0]!.proposal.scores).toBeDefined()
@@ -190,8 +191,8 @@ describe('Keeper', () => {
     await keeper.runCycle()
     await keeper.runCycle()
 
-    // 2 per cycle × 2 cycles = 4 decisions
-    expect(keeper.getDecisions()).toHaveLength(4)
+    // 3 per cycle × 2 cycles = 6 decisions
+    expect(keeper.getDecisions()).toHaveLength(6)
   })
 
   it('populates market scan after cycle', async () => {
