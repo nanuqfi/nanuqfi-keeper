@@ -333,8 +333,8 @@ export class Keeper {
         oracleDeviation: this.cachedInsight ? {} : undefined,
       }
 
-      // 4. Run algorithm engine for each vault (moderate + aggressive)
-      const vaults = ['moderate', 'aggressive'] as const
+      // 4. Run algorithm engine for each vault
+      const vaults = ['conservative', 'moderate', 'aggressive'] as const
       for (const riskLevel of vaults) {
         const backends = this.buildBackendConfigs(yieldData, riskLevel)
         const state: VaultState = {
