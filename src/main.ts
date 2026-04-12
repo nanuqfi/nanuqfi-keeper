@@ -19,8 +19,8 @@ const ai = config.aiApiKey
 const keeper = new Keeper({ config, monitor, ai })
 
 const dataSource: KeeperDataSource = {
-  getVaults: () => [],
-  getVault: () => undefined,
+  getVaults: () => keeper.getVaultSnapshots(),
+  getVault: (level: string) => keeper.getVaultSnapshot(level),
   getHistory: () => [],
   getDecisions: (level?: string, limit?: number) => {
     const all = keeper.getDecisions()

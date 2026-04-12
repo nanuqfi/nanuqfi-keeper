@@ -18,7 +18,7 @@ vi.mock('@solana/web3.js', async () => {
 })
 
 // Import chain/state after mocks are hoisted
-import { fetchRebalanceChainState } from '../chain/state.js'
+import { fetchRebalanceChainState, fetchVaultEquity } from '../chain/state.js'
 import { Connection } from '@solana/web3.js'
 
 // Helper to retrieve the mock connection from the module mock
@@ -161,6 +161,65 @@ describe('fetchRebalanceChainState', () => {
   it('throws on unknown risk level', async () => {
     await expect(
       fetchRebalanceChainState('https://test-rpc.com', 'ultra-risky'),
+    ).rejects.toThrow(/Unknown risk level/)
+  })
+})
+
+// ─── fetchVaultEquity ────────────────────────────────────────────────────────
+// RiskVault equity field offsets (after 8-byte discriminator):
+//   disc(8) | version(1) | allocator(32) | risk_level(1) |
+//   protocol_vault(32) | share_mint(32) |
+//   total_shares(8) | total_assets(8) | peak_equity(8) | current_equity(8)
+const TOTAL_ASSETS_OFFSET = 114
+const PEAK_EQUITY_OFFSET = 122
+const CURRENT_EQUITY_OFFSET = 130
+
+function buildRiskVaultEquity(
+  totalAssets: bigint,
+  peakEquity: bigint,
+  currentEquity: bigint,
+): Buffer {
+  const buf = Buffer.alloc(256, 0)
+  buf.writeBigUInt64LE(totalAssets, TOTAL_ASSETS_OFFSET)
+  buf.writeBigUInt64LE(peakEquity, PEAK_EQUITY_OFFSET)
+  buf.writeBigUInt64LE(currentEquity, CURRENT_EQUITY_OFFSET)
+  return buf
+}
+
+describe('fetchVaultEquity', () => {
+  let mockGetAccountInfo: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    const mockConn = {
+      getAccountInfo: vi.fn(),
+      getTokenAccountBalance: vi.fn(),
+    }
+    vi.mocked(Connection).mockImplementation(() => mockConn as any)
+    mockGetAccountInfo = mockConn.getAccountInfo
+  })
+
+  it('reads total_assets, peak_equity, current_equity from RiskVault bytes', async () => {
+    const data = buildRiskVaultEquity(500_000_000n, 600_000_000n, 580_000_000n)
+    mockGetAccountInfo.mockResolvedValueOnce({ data })
+
+    const result = await fetchVaultEquity('https://test-rpc.com', 'moderate')
+
+    expect(result.totalAssets).toBe(500_000_000n)
+    expect(result.peakEquity).toBe(600_000_000n)
+    expect(result.currentEquity).toBe(580_000_000n)
+  })
+
+  it('throws when RiskVault account not found', async () => {
+    mockGetAccountInfo.mockResolvedValueOnce(null)
+    await expect(
+      fetchVaultEquity('https://test-rpc.com', 'moderate'),
+    ).rejects.toThrow(/RiskVault account not found/)
+  })
+
+  it('throws on unknown risk level', async () => {
+    await expect(
+      fetchVaultEquity('https://test-rpc.com', 'invalid'),
     ).rejects.toThrow(/Unknown risk level/)
   })
 })

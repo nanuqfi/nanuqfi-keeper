@@ -27,6 +27,9 @@ const USDC_MINT = new PublicKey(
 //   last_rebalance_slot(8) | rebalance_counter(4)
 //
 // Sum: 8+1+32+1+32+32+8+8+8+8+8+8 = 154
+const RISK_VAULT_TOTAL_ASSETS_OFFSET = 114
+const RISK_VAULT_PEAK_EQUITY_OFFSET = 122
+const RISK_VAULT_CURRENT_EQUITY_OFFSET = 130
 const RISK_VAULT_REBALANCE_COUNTER_OFFSET = 154
 
 // Treasury field layout:
@@ -112,4 +115,43 @@ export async function fetchRebalanceChainState(
   const equitySnapshot = BigInt(balance.value.amount)
 
   return { rebalanceCounter, vaultUsdcAddress, treasuryUsdcAddress, equitySnapshot }
+}
+
+// ─── Vault Equity ─────────────────────────────────────────────────────────────
+
+export interface VaultEquityState {
+  /** total_assets: on-chain USDC equity accounted to the vault (raw lamports, 6 decimals). */
+  totalAssets: bigint
+  /** peak_equity: highest observed equity for drawdown computation (raw lamports). */
+  peakEquity: bigint
+  /** current_equity: most recently recorded equity (raw lamports). */
+  currentEquity: bigint
+}
+
+/**
+ * Fetch vault equity fields from a RiskVault account. Used by the keeper's
+ * API data source to publish tvl + drawdown without touching the rebalance path.
+ */
+export async function fetchVaultEquity(
+  rpcUrl: string,
+  riskLevel: string,
+): Promise<VaultEquityState> {
+  const connection = new Connection(rpcUrl, 'confirmed')
+  const riskIdx = riskLevelToIndex(riskLevel) // throws on unknown level
+
+  const [allocatorPda] = deriveAllocatorPda()
+  const [riskVaultPda] = deriveRiskVaultPda(allocatorPda, riskIdx)
+
+  const info = await connection.getAccountInfo(riskVaultPda)
+  if (!info?.data) {
+    throw new Error(
+      `RiskVault account not found for ${riskLevel} (PDA: ${riskVaultPda.toBase58()})`,
+    )
+  }
+
+  return {
+    totalAssets: info.data.readBigUInt64LE(RISK_VAULT_TOTAL_ASSETS_OFFSET),
+    peakEquity: info.data.readBigUInt64LE(RISK_VAULT_PEAK_EQUITY_OFFSET),
+    currentEquity: info.data.readBigUInt64LE(RISK_VAULT_CURRENT_EQUITY_OFFSET),
+  }
 }

@@ -5,7 +5,8 @@ import { AlgorithmEngine, type BackendConfig, type VaultState, type WeightPropos
 import { scanDeFiYields, type MarketScan } from './scanner/index.js'
 import { createAlerter, type Alerter } from './alerts/index.js'
 import { submitRebalance, type RebalanceResult } from './chain/index.js'
-import { fetchRebalanceChainState } from './chain/state.js'
+import { fetchRebalanceChainState, fetchVaultEquity } from './chain/state.js'
+import type { VaultSnapshot } from './health/api.js'
 import { AIProvider, buildInsightPrompt, validateAIInsight, type AIInsight, type MarketContext } from './ai/index.js'
 import { runBacktest, fetchHistoricalData, DEFAULT_CONFIG } from './backtest/index.js'
 import type { BacktestResult } from './backtest/index.js'
@@ -56,6 +57,7 @@ export class Keeper {
   private aiHistory: AIInsight[] = []
   private backtestCache: BacktestResult | null = null
   private backtestCacheTime = 0
+  private latestVaultSnapshots: Record<string, VaultSnapshot> = {}
 
   constructor(deps: KeeperDeps) {
     this.config = deps.config
@@ -156,6 +158,16 @@ export class Keeper {
   /** Access current weight allocations per risk level. */
   getCurrentWeights(): Record<string, Record<string, number>> {
     return this.currentWeights
+  }
+
+  /** Access latest published vault snapshot for API consumers. */
+  getVaultSnapshot(riskLevel: string): VaultSnapshot | undefined {
+    return this.latestVaultSnapshots[riskLevel]
+  }
+
+  /** Access all latest published vault snapshots. Empty until first cycle. */
+  getVaultSnapshots(): VaultSnapshot[] {
+    return Object.values(this.latestVaultSnapshots)
   }
 
   /** Access cached AI insight, returns null if absent or stale. */
@@ -420,7 +432,12 @@ export class Keeper {
         this.saveDecisionHistory()
       }
 
-      // 5. Record success
+      // 5. Publish vault snapshots for /v1/vaults API consumers.
+      // Runs after currentWeights is updated so the snapshot reflects the
+      // cycle's allocation decisions. Fail-soft — never aborts the cycle.
+      await this.publishVaultSnapshots(yieldData)
+
+      // 6. Record success
       this.monitor.recordCycleSuccess()
       logger.info('Cycle', 'Keeper cycle completed', { durationMs: Date.now() - cycleStart })
 
@@ -530,6 +547,52 @@ export class Keeper {
       kaminoSupplyRate: kaminoRate,
       marginfiLendingRate: marginfiRate,
       luloRegularRate: luloRate,
+    }
+  }
+
+  private async publishVaultSnapshots(yieldData: YieldData): Promise<void> {
+    const rates: Record<string, number> = {
+      'kamino-lending': yieldData.kaminoSupplyRate,
+      'marginfi-lending': yieldData.marginfiLendingRate,
+      'lulo-lending': yieldData.luloRegularRate,
+    }
+    const rpc = this.config.rpcUrls[0]
+
+    for (const riskLevel of ['conservative', 'moderate', 'aggressive']) {
+      const weights = this.currentWeights[riskLevel] ?? {}
+      const apy = Object.entries(weights).reduce(
+        (acc, [name, bps]) => acc + (bps / 10_000) * (rates[name] ?? 0),
+        0,
+      )
+
+      let tvl = 0
+      let drawdown = 0
+
+      if (rpc) {
+        try {
+          const equity = await fetchVaultEquity(rpc, riskLevel)
+          // total_assets is raw USDC lamports (6 decimals) → convert to USDC.
+          tvl = Number(equity.totalAssets) / 1_000_000
+          if (equity.peakEquity > 0n && equity.peakEquity >= equity.currentEquity) {
+            const peak = Number(equity.peakEquity)
+            const current = Number(equity.currentEquity)
+            drawdown = peak > 0 ? Math.max(0, (peak - current) / peak) : 0
+          }
+        } catch (err) {
+          logger.warn('VaultSnapshot', 'Failed to read vault equity from chain', {
+            riskLevel,
+            error: err instanceof Error ? err.message : String(err),
+          })
+        }
+      }
+
+      this.latestVaultSnapshots[riskLevel] = {
+        riskLevel,
+        weights,
+        apy,
+        tvl,
+        drawdown,
+      }
     }
   }
 

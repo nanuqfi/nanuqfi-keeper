@@ -234,6 +234,67 @@ describe('Keeper', () => {
       expect(sum).toBe(10_000)
     }
   })
+
+  // -------------------------------------------------------------------------
+  // Vault snapshot publishing (feeds /v1/vaults API)
+  // -------------------------------------------------------------------------
+
+  it('getVaultSnapshots returns empty array before any cycle runs', () => {
+    expect(keeper.getVaultSnapshots()).toEqual([])
+  })
+
+  it('getVaultSnapshot returns undefined before any cycle runs', () => {
+    expect(keeper.getVaultSnapshot('conservative')).toBeUndefined()
+  })
+
+  it('publishes a snapshot for each risk level after runCycle', async () => {
+    mockFetchForCycle()
+    await keeper.runCycle()
+
+    const snaps = keeper.getVaultSnapshots()
+    const levels = snaps.map(s => s.riskLevel).sort()
+    expect(levels).toEqual(['aggressive', 'conservative', 'moderate'])
+  })
+
+  it('snapshot carries risk-weighted apy derived from keeper weights + yield data', async () => {
+    mockFetchForCycle()
+    await keeper.runCycle()
+
+    const snap = keeper.getVaultSnapshot('moderate')
+    expect(snap).toBeDefined()
+    expect(snap!.riskLevel).toBe('moderate')
+    expect(Object.keys(snap!.weights).length).toBe(3)
+    expect(snap!.apy).toBeGreaterThan(0)
+    // apy must equal Σ (weight_bps/10000) * backend_apy
+    const yields = keeper.getYieldData()!
+    const rates: Record<string, number> = {
+      'kamino-lending': yields.kaminoSupplyRate,
+      'marginfi-lending': yields.marginfiLendingRate,
+      'lulo-lending': yields.luloRegularRate,
+    }
+    const expectedApy = Object.entries(snap!.weights).reduce(
+      (acc, [name, bps]) => acc + (bps / 10_000) * (rates[name] ?? 0),
+      0,
+    )
+    expect(snap!.apy).toBeCloseTo(expectedApy, 6)
+  })
+
+  it('snapshot tvl and drawdown fall back to 0 when on-chain read unavailable', async () => {
+    mockFetchForCycle()
+    await keeper.runCycle()
+
+    // tests run without a real RPC — fail-soft path must leave tvl/drawdown as 0
+    const snap = keeper.getVaultSnapshot('conservative')
+    expect(snap!.tvl).toBe(0)
+    expect(snap!.drawdown).toBe(0)
+  })
+
+  it('getVaultSnapshot returns undefined for unknown risk level', async () => {
+    mockFetchForCycle()
+    await keeper.runCycle()
+
+    expect(keeper.getVaultSnapshot('unknown')).toBeUndefined()
+  })
 })
 
 describe('AI cycle', () => {
