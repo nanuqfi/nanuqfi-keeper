@@ -55,7 +55,7 @@ describe('PDA derivation', () => {
   })
 
   it('uses correct program ID', () => {
-    expect(PROGRAM_ID.toBase58()).toBe('CDhkMBnc43wJQyVaSrreXk2ojvQvZMWrAWNBLSjaRJxq')
+    expect(PROGRAM_ID.toBase58()).toBe('2QtJ5kmxLuW2jYCFpJMtzZ7PCnKdoMwkeueYoDUi5z5P')
   })
 })
 
