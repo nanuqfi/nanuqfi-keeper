@@ -34,13 +34,15 @@ export function deriveAllocatorPda(): [PublicKey, number] {
 }
 
 export function deriveRiskVaultPda(
-  allocator: PublicKey,
+  _allocator: PublicKey,
   riskLevelIndex: number,
 ): [PublicKey, number] {
+  // On-chain seeds: [b"vault", risk_level_u8] — no allocator ref.
+  // _allocator is retained for call-site compatibility.
   const riskBuf = Buffer.alloc(1)
   riskBuf.writeUInt8(riskLevelIndex)
   return PublicKey.findProgramAddressSync(
-    [Buffer.from('risk_vault'), allocator.toBuffer(), riskBuf],
+    [Buffer.from('vault'), riskBuf],
     PROGRAM_ID,
   )
 }

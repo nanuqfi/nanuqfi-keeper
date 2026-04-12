@@ -57,6 +57,21 @@ describe('PDA derivation', () => {
   it('uses correct program ID', () => {
     expect(PROGRAM_ID.toBase58()).toBe('2QtJ5kmxLuW2jYCFpJMtzZ7PCnKdoMwkeueYoDUi5z5P')
   })
+
+  it('derives risk vault PDAs matching on-chain allocator seeds', () => {
+    // Expected addresses taken from devnet deployment of allocator 2QtJ5k...5z5P.
+    // On-chain seeds are [b"vault", risk_level_u8] — verify keeper derives the
+    // same PDAs the frontend + program use (not the legacy b"risk_vault" seed).
+    const [allocator] = deriveAllocatorPda()
+
+    const [conservative] = deriveRiskVaultPda(allocator, 0)
+    const [moderate] = deriveRiskVaultPda(allocator, 1)
+    const [aggressive] = deriveRiskVaultPda(allocator, 2)
+
+    expect(conservative.toBase58()).toBe('4uKBDp2yaR3jxLownqA1A8kMGy6WFHcUsuTk23Kj9pbD')
+    expect(moderate.toBase58()).toBe('7cJkxnKbJ95U2vcciwZY5uMdy1VPphVVJQNgjBXrXWuZ')
+    expect(aggressive.toBase58()).toBe('9hrkdDpiDyDjBiPoSncZCxwCT15BCMEaHNwJgCojcJ9B')
+  })
 })
 
 describe('weightsToU16Array', () => {
